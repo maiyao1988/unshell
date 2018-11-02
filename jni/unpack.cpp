@@ -33,9 +33,26 @@ EXPORT _Z23dvmCreateInternalThreadPlPKcPFPvS2_ES2_
 EXPORT bool dvmInitClass(ClassObject* clazz)
 
 */
+struct Arg{
+    DvmDex* pDvmDex;
+    Object * loader;
+}param;
+
 void *dvmH = dlopen("libdvm.so", RTLD_NOW);
-static void createDumpThread(DvmDex *dvmDex, Object *loader) {
+
+static void *dumpClass(void *param) {
+    return 0;
+}
+
+static void createDumpThread(DvmDex *pDvmDex, Object *loader) {
     dvmCreateInternalThreadFun dvmCreateInternalThread = (dvmCreateInternalThreadFun)dlsym(dvmH, "_Z23dvmCreateInternalThreadPlPKcPFPvS2_ES2_");
+    Arg param;
+
+    param.loader=loader;
+    param.pDvmDex=pDvmDex;
+
+    pthread_t dumpthread;
+    dvmCreateInternalThread(&dumpthread, "ClassDumper", dumpClass, (void*)&param);                             
 
 }
 
