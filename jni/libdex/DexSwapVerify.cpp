@@ -25,7 +25,7 @@
 #include "DexUtf.h"
 #include "Leb128.h"
 
-#include <safe_iop.h>
+#include "safe_iop.h"
 #include <zlib.h>
 
 #include <stdlib.h>

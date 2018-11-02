@@ -6,11 +6,38 @@
 #include "vm/oo/Object.h"
 #include <jni.h>
 #include <android/log.h>
+#include <dlfcn.h>
 
 #include <set>
 #include <cstdio>
 #include <unistd.h>
 #define TAG "unshell"
+
+typedef bool (*dvmIsClassInitializedFun)(ClassObject *);
+typedef ClassObject *(*dvmDefineClassFun)(DvmDex *, char const*, Object *);
+
+typedef bool (*dvmCreateInternalThreadFun)(pthread_t *, const char *, void *(*)(void *), void *);
+
+typedef bool (*dvmInitClass)(ClassObject* clazz);
+/*
+
+; dvmIsClassInitialized(ClassObject const*)
+EXPORT _Z21dvmIsClassInitializedPK11ClassObject
+
+; dvmDefineClass(DvmDex *, char const*, Object *)
+EXPORT _Z14dvmDefineClassP6DvmDexPKcP6Object
+
+; _DWORD __fastcall dvmCreateInternalThread(int *, const char *, void *(__cdecl *)(void *), void *)
+EXPORT _Z23dvmCreateInternalThreadPlPKcPFPvS2_ES2_
+
+EXPORT bool dvmInitClass(ClassObject* clazz)
+
+*/
+void *dvmH = dlopen("libdvm.so", RTLD_NOW);
+static void createDumpThread(DvmDex *dvmDex, Object *loader) {
+    dvmCreateInternalThreadFun dvmCreateInternalThread = (dvmCreateInternalThreadFun)dlsym(dvmH, "_Z23dvmCreateInternalThreadPlPKcPFPvS2_ES2_");
+
+}
 
 using namespace std;
 static set<void*> s_addrHasDump; 

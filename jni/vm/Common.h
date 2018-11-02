@@ -30,7 +30,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <assert.h>
-//#include "cutils/log.h"
+#include "log.h"
 
 #if defined(HAVE_ENDIAN_H)
 # include <endian.h>
