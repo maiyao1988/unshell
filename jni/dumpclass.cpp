@@ -351,7 +351,7 @@ static bool fixClassDataMethod(DexMethod *methods, Method *actualMethods, size_t
             Method *method = &(actualMethods[i]);
             uint32_t ac = (method->accessFlags) & mask;
 
-            ALOGI("GOT IT direct method name %s", method->name);
+            ALOGI("GOT IT method name %s", method->name);
 
             if (!method->insns || ac & ACC_NATIVE)
             {
