@@ -79,7 +79,11 @@ static DexClassData *ReadClassData(const uint8_t **pData)
 
     ReadClassDataHeader(pData, &header);
 
-    size_t resultSize = sizeof(DexClassData) + (header.staticFieldsSize * sizeof(DexField)) + (header.instanceFieldsSize * sizeof(DexField)) + (header.directMethodsSize * sizeof(DexMethod)) + (header.virtualMethodsSize * sizeof(DexMethod));
+    size_t resultSize = sizeof(DexClassData) + 
+    (header.staticFieldsSize * sizeof(DexField)) + 
+    (header.instanceFieldsSize * sizeof(DexField)) + 
+    (header.directMethodsSize * sizeof(DexMethod)) + 
+    (header.virtualMethodsSize * sizeof(DexMethod));
 
     DexClassData *result = (DexClassData *)malloc(resultSize);
 
@@ -431,8 +435,6 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
     sprintf(path, "%s/extra", dumpDir);
     FILE *fpExtra = fopen(path, "wb");
 
-    uint32_t mask = 0x3ffff;
-    char padding = 0;
     const char *header = "Landroid";
     unsigned int num_class_defs = pDexFile->pHeader->classDefsSize;
     uint32_t total_pointer = mem->length - uint32_t(pDexFile->baseAddr - (const u1 *)mem->addr);
@@ -518,7 +520,7 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
             total_pointer += class_data_len;
             while (total_pointer & 3)
             {
-                fwrite(&padding, 1, 1, fpExtra);
+                fputc(0, fpExtra);
                 fflush(fpExtra);
                 total_pointer++;
             }
@@ -565,7 +567,7 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
 
     while (inc > 0)
     {
-        fwrite(&padding, 1, 1, fpDex);
+        fputc(0, fpExtra);
         fflush(fpDex);
         inc--;
     }
