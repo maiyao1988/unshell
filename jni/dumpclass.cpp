@@ -625,11 +625,6 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
     }
 
     r = fstat(fd, &st);
-    if (r == -1)
-    {
-        close(fd);
-        return;
-    }
 
     len = st.st_size;
     addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
@@ -647,11 +642,6 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
     }
 
     r = fstat(fd, &st);
-    if (r == -1)
-    {
-        close(fd);
-        return;
-    }
 
     len = st.st_size;
     addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
@@ -675,11 +665,6 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
     }
 
     r = fstat(fd, &st);
-    if (r == -1)
-    {
-        close(fd);
-        return;
-    }
 
     len = st.st_size;
     addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
