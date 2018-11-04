@@ -7,6 +7,7 @@ LOCAL_LDLIBS := \
 
 LOCAL_SRC_FILES := \
 	unpack.cpp \
+	dumpclass.cpp \
 	libdex/DexCatch.cpp \
 	libdex/DexClass.cpp \
 	libdex/DexDataMap.cpp \

@@ -13,12 +13,8 @@
 #include <unistd.h>
 #define TAG "unshell"
 
-typedef bool (*dvmIsClassInitializedFun)(ClassObject *);
-typedef ClassObject *(*dvmDefineClassFun)(DvmDex *, char const*, Object *);
 
 typedef bool (*dvmCreateInternalThreadFun)(pthread_t *, const char *, void *(*)(void *), void *);
-
-typedef bool (*dvmInitClass)(ClassObject* clazz);
 /*
 
 ; dvmIsClassInitialized(ClassObject const*)
