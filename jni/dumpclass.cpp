@@ -306,19 +306,19 @@ static void writeExceptClassDef(const char *dumpDir, DvmDex *pDvmDex) {
 
     char temp[255] = {0};
     sprintf(temp, "%s/part1", dumpDir);
-    FILE *fp = fopen(temp, "wb");
+    FILE *fpDef = fopen(temp, "wb");
     const u1 *addr = (const u1*)mem->addr;
     int length=int(pDexFile->baseAddr+pDexFile->pHeader->classDefsOff-addr);
-    fwrite(addr,1,length,fp);
-    fclose(fp);
+    fwrite(addr,1,length,fpDef);
+    fclose(fpDef);
 
 
     sprintf(temp, "%s/data", dumpDir);
-    fp = fopen(temp, "wb");
+    fpDef = fopen(temp, "wb");
     addr = pDexFile->baseAddr+pDexFile->pHeader->classDefsOff+sizeof(DexClassDef)*pDexFile->pHeader->classDefsSize;
     length=int((const u1*)mem->addr+mem->length-addr);
-    fwrite(addr,1,length,fp);
-    fclose(fp);
+    fwrite(addr,1,length,fpDef);
+    fclose(fpDef);
 }
 
 void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Object *loader)
@@ -330,10 +330,10 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
 
     char path[255] = {0};
     sprintf(path, "%s/classdef", dumpDir);
-    FILE *fp = fopen(path, "wb");
+    FILE *fpDef = fopen(path, "wb");
 
     sprintf(path, "%s/extra", dumpDir);
-    FILE *fp1 = fopen(path, "wb");
+    FILE *fpExtra = fopen(path, "wb");
 
     uint32_t mask = 0x3ffff;
     char padding = 0;
@@ -454,13 +454,13 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
 
                     ALOGI("GOT IT method code changed");
 
-                    fwrite(item, 1, code_item_len, fp1);
-                    fflush(fp1);
+                    fwrite(item, 1, code_item_len, fpExtra);
+                    fflush(fpExtra);
                     total_pointer += code_item_len;
                     while (total_pointer & 3)
                     {
-                        fwrite(&padding, 1, 1, fp1);
-                        fflush(fp1);
+                        fwrite(&padding, 1, 1, fpExtra);
+                        fflush(fpExtra);
                         total_pointer++;
                     }
                 }
@@ -524,13 +524,13 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
 
                     ALOGI("GOT IT method code changed");
 
-                    fwrite(item, 1, code_item_len, fp1);
-                    fflush(fp1);
+                    fwrite(item, 1, code_item_len, fpExtra);
+                    fflush(fpExtra);
                     total_pointer += code_item_len;
                     while (total_pointer & 3)
                     {
-                        fwrite(&padding, 1, 1, fp1);
-                        fflush(fp1);
+                        fwrite(&padding, 1, 1, fpExtra);
+                        fflush(fpExtra);
                         total_pointer++;
                     }
                 }
@@ -551,13 +551,13 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
                 continue;
             }
             temp.classDataOff = total_pointer;
-            fwrite(out, 1, class_data_len, fp1);
-            fflush(fp1);
+            fwrite(out, 1, class_data_len, fpExtra);
+            fflush(fpExtra);
             total_pointer += class_data_len;
             while (total_pointer & 3)
             {
-                fwrite(&padding, 1, 1, fp1);
-                fflush(fp1);
+                fwrite(&padding, 1, 1, fpExtra);
+                fflush(fpExtra);
                 total_pointer++;
             }
             free(out);
@@ -578,16 +578,16 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
         }
 
         ALOGI("GOT IT classdef");
-        fwrite(p, sizeof(DexClassDef), 1, fp);
-        fflush(fp);
+        fwrite(p, sizeof(DexClassDef), 1, fpDef);
+        fflush(fpDef);
     }
 
-    fclose(fp1);
-    fclose(fp);
+    fclose(fpExtra);
+    fclose(fpDef);
 
     sprintf(path, "%s/%s", dumpDir, outDexName);
-    fp = fopen(path, "wb");
-    rewind(fp);
+    fpDef = fopen(path, "wb");
+    rewind(fpDef);
 
     int fd = -1;
     int r = -1;
@@ -610,8 +610,8 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
 
     int len = st.st_size;
     addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
-    fwrite(addr, 1, len, fp);
-    fflush(fp);
+    fwrite(addr, 1, len, fpDef);
+    fflush(fpDef);
     munmap(addr, len);
     close(fd);
 
@@ -633,8 +633,8 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
 
     len = st.st_size;
     addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
-    fwrite(addr, 1, len, fp);
-    fflush(fp);
+    fwrite(addr, 1, len, fpDef);
+    fflush(fpDef);
     munmap(addr, len);
     close(fd);
 
@@ -655,15 +655,15 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
 
     len = st.st_size;
     addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
-    fwrite(addr, 1, len, fp);
-    fflush(fp);
+    fwrite(addr, 1, len, fpDef);
+    fflush(fpDef);
     munmap(addr, len);
     close(fd);
 
     while (inc > 0)
     {
-        fwrite(&padding, 1, 1, fp);
-        fflush(fp);
+        fwrite(&padding, 1, 1, fpDef);
+        fflush(fpDef);
         inc--;
     }
 
@@ -683,12 +683,12 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
 
     len = st.st_size;
     addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
-    fwrite(addr, 1, len, fp);
-    fflush(fp);
+    fwrite(addr, 1, len, fpDef);
+    fflush(fpDef);
     munmap(addr, len);
     close(fd);
 
-    fclose(fp);
+    fclose(fpDef);
 
     return;
 }
