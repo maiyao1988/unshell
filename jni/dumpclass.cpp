@@ -493,9 +493,10 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
             continue;
         }
 
-        need_extra = fixClassDataMethod(pData->directMethods, clazz->directMethods, pData->header.directMethodsSize, pDexFile, start, end, fpExtra, total_pointer);
+        need_extra = need_extra || fixClassDataMethod(pData->directMethods, clazz->directMethods, pData->header.directMethodsSize, pDexFile, start, end, fpExtra, total_pointer);
         
-        need_extra = fixClassDataMethod(pData->virtualMethods, clazz->virtualMethods, pData->header.virtualMethodsSize, pDexFile, start, end, fpExtra, total_pointer);
+        
+        need_extra = need_extra || fixClassDataMethod(pData->virtualMethods, clazz->virtualMethods, pData->header.virtualMethodsSize, pDexFile, start, end, fpExtra, total_pointer);
 
 
     classdef:
