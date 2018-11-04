@@ -299,8 +299,32 @@ static uint8_t *codeitem_end(const u1 **pData)
     return (uint8_t *)(*pData);
 }
 
+static void writeExceptClassDef(const char *dumpDir, DvmDex *pDvmDex) {
+
+    DexFile* pDexFile=pDvmDex->pDexFile;
+    MemMapping * mem=&pDvmDex->memMap;
+
+    char temp[255] = {0};
+    sprintf(temp, "%s/part1", dumpDir);
+    FILE *fp = fopen(temp, "wb");
+    const u1 *addr = (const u1*)mem->addr;
+    int length=int(pDexFile->baseAddr+pDexFile->pHeader->classDefsOff-addr);
+    fwrite(addr,1,length,fp);
+    fclose(fp);
+
+
+    sprintf(temp, "%s/data", dumpDir);
+    fp = fopen(temp, "wb");
+    addr = pDexFile->baseAddr+pDexFile->pHeader->classDefsOff+sizeof(DexClassDef)*pDexFile->pHeader->classDefsSize;
+    length=int((const u1*)mem->addr+mem->length-addr);
+    fwrite(addr,1,length,fp);
+    fclose(fp);
+}
+
 void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Object *loader)
 {
+    writeExceptClassDef(dumpDir, pDvmDex);
+
     DexFile *pDexFile = pDvmDex->pDexFile;
     MemMapping *mem = &pDvmDex->memMap;
 
@@ -567,7 +591,6 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
 
     int fd = -1;
     int r = -1;
-    int len = 0;
     char *addr = NULL;
     struct stat st;
 
@@ -585,7 +608,7 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
         return;
     }
 
-    len = st.st_size;
+    int len = st.st_size;
     addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
     fwrite(addr, 1, len, fp);
     fflush(fp);
