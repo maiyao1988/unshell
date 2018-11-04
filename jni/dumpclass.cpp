@@ -340,7 +340,7 @@ static void appenFileTo(const char *path, FILE *targetFd)
     close(fd);
 }
 
-static bool fixClassDataMethod(DexMethod *methods, Method *actualMethods, size_t numMethods, DexFile *pDexFile, int start, int end, FILE *fpExtra, uint32_t &total_pointer)
+static bool fixClassDataMethod(DexMethod *methods, Method *actualMethods, size_t numMethods, DexFile *pDexFile, int dataStart, int dataEnd, FILE *fpExtra, uint32_t &total_pointer)
 {
     const uint32_t mask = 0x3ffff;
     bool need_extra = false;
@@ -373,14 +373,14 @@ static bool fixClassDataMethod(DexMethod *methods, Method *actualMethods, size_t
                 methods[i].accessFlags = ac;
             }
 
-            if (codeitem_off != methods[i].codeOff && ((codeitem_off >= start && codeitem_off <= end) || codeitem_off == 0))
+            if (codeitem_off != methods[i].codeOff && ((codeitem_off >= dataStart && codeitem_off <= dataEnd) || codeitem_off == 0))
             {
                 ALOGI("GOT IT method code");
                 need_extra = true;
                 methods[i].codeOff = codeitem_off;
             }
 
-            if ((codeitem_off < start || codeitem_off > end) && codeitem_off != 0)
+            if ((codeitem_off < dataStart || codeitem_off > dataEnd) && codeitem_off != 0)
             {
                 need_extra = true;
                 methods[i].codeOff = total_pointer;
@@ -444,8 +444,8 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
     }
 
     int inc = total_pointer - rec;
-    uint32_t start = pDexFile->pHeader->classDefsOff + sizeof(DexClassDef) * num_class_defs;
-    uint32_t end = (uint32_t)((const u1 *)mem->addr + mem->length - pDexFile->baseAddr);
+    uint32_t dataStart = pDexFile->pHeader->classDefsOff + sizeof(DexClassDef) * num_class_defs;
+    uint32_t dataEnd = (uint32_t)((const u1 *)mem->addr + mem->length - pDexFile->baseAddr);
 
     for (size_t i = 0; i < num_class_defs; i++)
     {
@@ -480,7 +480,7 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
             }
         }
 
-        if (pClassDef->classDataOff < start || pClassDef->classDataOff > end)
+        if (pClassDef->classDataOff < dataStart || pClassDef->classDataOff > dataEnd)
         {
             need_extra = true;
         }
@@ -493,10 +493,10 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
             continue;
         }
 
-        need_extra = need_extra || fixClassDataMethod(pData->directMethods, clazz->directMethods, pData->header.directMethodsSize, pDexFile, start, end, fpExtra, total_pointer);
+        need_extra = need_extra || fixClassDataMethod(pData->directMethods, clazz->directMethods, pData->header.directMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
         
         
-        need_extra = need_extra || fixClassDataMethod(pData->virtualMethods, clazz->virtualMethods, pData->header.virtualMethodsSize, pDexFile, start, end, fpExtra, total_pointer);
+        need_extra = need_extra || fixClassDataMethod(pData->virtualMethods, clazz->virtualMethods, pData->header.virtualMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
 
 
     classdef:
