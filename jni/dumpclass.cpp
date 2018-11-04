@@ -321,6 +321,25 @@ static void writeExceptClassDef(const char *dumpDir, DvmDex *pDvmDex) {
     fclose(fpDef);
 }
 
+static void appenFileTo(const char *path, FILE *targetFd) 
+{
+    int fd = open(path, O_RDONLY, 0666);
+    if (fd == -1)
+    {
+        return;
+    }
+
+    struct stat st = {0};
+    int r = fstat(fd, &st);
+
+    int len = st.st_size;
+    char *addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
+    fwrite(addr, 1, len, targetFd);
+    fflush(targetFd);
+    munmap(addr, len);
+    close(fd);
+}
+
 void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Object *loader)
 {
     writeExceptClassDef(dumpDir, pDvmDex);
@@ -586,94 +605,33 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
     fclose(fpDef);
 
     sprintf(path, "%s/%s", dumpDir, outDexName);
-    fpDef = fopen(path, "wb");
-    rewind(fpDef);
-
-    int fd = -1;
-    int r = -1;
-    char *addr = NULL;
-    struct stat st;
+    FILE *fpDex = fopen(path, "wb");
+    rewind(fpDex);
 
     sprintf(path, "%s/part1", dumpDir);
-    fd = open(path, O_RDONLY, 0666);
-    if (fd == -1)
-    {
-        return;
-    }
-
-    r = fstat(fd, &st);
-    if (r == -1)
-    {
-        close(fd);
-        return;
-    }
-
-    int len = st.st_size;
-    addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
-    fwrite(addr, 1, len, fpDef);
-    fflush(fpDef);
-    munmap(addr, len);
-    close(fd);
-
+    
+    appenFileTo(path, fpDex);
 
     sprintf(path, "%s/classdef", dumpDir);
 
-    fd = open(path, O_RDONLY, 0666);
-    if (fd == -1)
-    {
-        return;
-    }
-
-    r = fstat(fd, &st);
-
-    len = st.st_size;
-    addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
-    fwrite(addr, 1, len, fpDef);
-    fflush(fpDef);
-    munmap(addr, len);
-    close(fd);
-
+    appenFileTo(path, fpDex);
 
     sprintf(path, "%s/data", dumpDir);
-    fd = open(path, O_RDONLY, 0666);
-    if (fd == -1)
-    {
-        return;
-    }
 
-    r = fstat(fd, &st);
-
-    len = st.st_size;
-    addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
-    fwrite(addr, 1, len, fpDef);
-    fflush(fpDef);
-    munmap(addr, len);
-    close(fd);
+    appenFileTo(path, fpDex);
 
     while (inc > 0)
     {
-        fwrite(&padding, 1, 1, fpDef);
-        fflush(fpDef);
+        fwrite(&padding, 1, 1, fpDex);
+        fflush(fpDex);
         inc--;
     }
 
     sprintf(path, "%s/extra", dumpDir);
-    fd = open(path, O_RDONLY, 0666);
-    if (fd == -1)
-    {
-        return;
-    }
 
-    r = fstat(fd, &st);
+    appenFileTo(path, fpDex);
 
-    len = st.st_size;
-    addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
-    fwrite(addr, 1, len, fpDef);
-    fflush(fpDef);
-    munmap(addr, len);
-    close(fd);
-
-    fclose(fpDef);
+    fclose(fpDex);
 
     return;
 }
