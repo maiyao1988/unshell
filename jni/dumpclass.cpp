@@ -340,8 +340,9 @@ static void appenFileTo(const char *path, FILE *targetFd)
     close(fd);
 }
 
-static bool fixClassDataMethod(Method *methods, Method *actualMethods, size_t numMethods, int &total_pointer)
+static bool fixClassDataMethod(DexMethod *methods, Method *actualMethods, size_t numMethods, DexFile *pDexFile, int start, int end, FILE *fpExtra, uint32_t &total_pointer)
 {
+    const uint32_t mask = 0x3ffff;
     bool need_extra = false;
     if (methods)
     {
@@ -350,7 +351,7 @@ static bool fixClassDataMethod(Method *methods, Method *actualMethods, size_t nu
             Method *method = &(actualMethods[i]);
             uint32_t ac = (method->accessFlags) & mask;
 
-            ALOGI("GOT IT direct method name %s.%s", descriptor, method->name);
+            ALOGI("GOT IT direct method name %s", method->name);
 
             if (!method->insns || ac & ACC_NATIVE)
             {
@@ -405,7 +406,8 @@ static bool fixClassDataMethod(Method *methods, Method *actualMethods, size_t nu
                 total_pointer += code_item_len;
                 while (total_pointer & 3)
                 {
-                    fwrite(&padding, 1, 1, fpExtra);
+                    //对齐
+                    fputc(0, fpExtra);
                     fflush(fpExtra);
                     total_pointer++;
                 }
@@ -491,145 +493,10 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
             continue;
         }
 
-        if (pData->directMethods)
-        {
-            for (uint32_t i = 0; i < pData->header.directMethodsSize; i++)
-            {
-                Method *method = &(clazz->directMethods[i]);
-                uint32_t ac = (method->accessFlags) & mask;
+        need_extra = fixClassDataMethod(pData->directMethods, clazz->directMethods, pData->header.directMethodsSize, pDexFile, start, end, fpExtra, total_pointer);
+        
+        need_extra = fixClassDataMethod(pData->virtualMethods, clazz->virtualMethods, pData->header.virtualMethodsSize, pDexFile, start, end, fpExtra, total_pointer);
 
-                ALOGI("GOT IT direct method name %s.%s", descriptor, method->name);
-
-                if (!method->insns || ac & ACC_NATIVE)
-                {
-                    if (pData->directMethods[i].codeOff)
-                    {
-                        need_extra = true;
-                        pData->directMethods[i].accessFlags = ac;
-                        pData->directMethods[i].codeOff = 0;
-                    }
-                    continue;
-                }
-
-                u4 codeitem_off = u4((const u1 *)method->insns - 16 - pDexFile->baseAddr);
-
-                if (ac != pData->directMethods[i].accessFlags)
-                {
-                    ALOGI("GOT IT method ac");
-                    need_extra = true;
-                    pData->directMethods[i].accessFlags = ac;
-                }
-
-                if (codeitem_off != pData->directMethods[i].codeOff && ((codeitem_off >= start && codeitem_off <= end) || codeitem_off == 0))
-                {
-                    ALOGI("GOT IT method code");
-                    need_extra = true;
-                    pData->directMethods[i].codeOff = codeitem_off;
-                }
-
-                if ((codeitem_off < start || codeitem_off > end) && codeitem_off != 0)
-                {
-                    need_extra = true;
-                    pData->directMethods[i].codeOff = total_pointer;
-                    DexCode *code = (DexCode *)((const u1 *)method->insns - 16);
-                    uint8_t *item = (uint8_t *)code;
-                    int code_item_len = 0;
-                    if (code->triesSize)
-                    {
-                        const u1 *handler_data = dexGetCatchHandlerData(code);
-                        const u1 **phandler = (const u1 **)&handler_data;
-                        uint8_t *tail = codeitem_end(phandler);
-                        code_item_len = (int)(tail - item);
-                    }
-                    else
-                    {
-                        code_item_len = 16 + code->insnsSize * 2;
-                    }
-
-                    ALOGI("GOT IT method code changed");
-
-                    fwrite(item, 1, code_item_len, fpExtra);
-                    fflush(fpExtra);
-                    total_pointer += code_item_len;
-                    while (total_pointer & 3)
-                    {
-                        fwrite(&padding, 1, 1, fpExtra);
-                        fflush(fpExtra);
-                        total_pointer++;
-                    }
-                }
-            }
-        }
-
-        if (pData->virtualMethods)
-        {
-            for (uint32_t i = 0; i < pData->header.virtualMethodsSize; i++)
-            {
-                Method *method = &(clazz->virtualMethods[i]);
-                uint32_t ac = (method->accessFlags) & mask;
-
-                ALOGI("GOT IT virtual method name %s.%s", descriptor, method->name);
-
-                if (!method->insns || ac & ACC_NATIVE)
-                {
-                    if (pData->virtualMethods[i].codeOff)
-                    {
-                        need_extra = true;
-                        pData->virtualMethods[i].accessFlags = ac;
-                        pData->virtualMethods[i].codeOff = 0;
-                    }
-                    continue;
-                }
-
-                u4 codeitem_off = u4((const u1 *)method->insns - 16 - pDexFile->baseAddr);
-
-                if (ac != pData->virtualMethods[i].accessFlags)
-                {
-                    ALOGI("GOT IT method ac");
-                    need_extra = true;
-                    pData->virtualMethods[i].accessFlags = ac;
-                }
-
-                if (codeitem_off != pData->virtualMethods[i].codeOff && ((codeitem_off >= start && codeitem_off <= end) || codeitem_off == 0))
-                {
-                    ALOGI("GOT IT method code");
-                    need_extra = true;
-                    pData->virtualMethods[i].codeOff = codeitem_off;
-                }
-
-                if ((codeitem_off < start || codeitem_off > end) && codeitem_off != 0)
-                {
-                    need_extra = true;
-                    pData->virtualMethods[i].codeOff = total_pointer;
-                    DexCode *code = (DexCode *)((const u1 *)method->insns - 16);
-                    uint8_t *item = (uint8_t *)code;
-                    int code_item_len = 0;
-                    if (code->triesSize)
-                    {
-                        const u1 *handler_data = dexGetCatchHandlerData(code);
-                        const u1 **phandler = (const u1 **)&handler_data;
-                        uint8_t *tail = codeitem_end(phandler);
-                        code_item_len = (int)(tail - item);
-                    }
-                    else
-                    {
-                        code_item_len = 16 + code->insnsSize * 2;
-                    }
-
-                    ALOGI("GOT IT method code changed");
-
-                    fwrite(item, 1, code_item_len, fpExtra);
-                    fflush(fpExtra);
-                    total_pointer += code_item_len;
-                    while (total_pointer & 3)
-                    {
-                        fwrite(&padding, 1, 1, fpExtra);
-                        fflush(fpExtra);
-                        total_pointer++;
-                    }
-                }
-            }
-        }
 
     classdef:
         DexClassDef temp = *pClassDef;
