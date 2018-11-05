@@ -452,58 +452,53 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
     for (size_t i = 0; i < num_class_defs; i++)
     {
         bool need_extra = false;
-        ClassObject *clazz = NULL;
-        const u1 *data = NULL;
-        DexClassData *pData = NULL;
-        bool pass = false;
         const DexClassDef *pClassDef = dexGetClassDef(pDvmDex->pDexFile, i);
+        DexClassDef temp = *pClassDef;
         const char *descriptor = dexGetClassDescriptor(pDvmDex->pDexFile, pClassDef);
+
+        const u1 *data = dexGetClassData(pDexFile, pClassDef);
+        DexClassData *pData = ReadClassData(&data);
 
         if (!strncmp(header, descriptor, 8) || !pClassDef->classDataOff)
         {
-            pass = true;
-            goto classdef;
+            temp.classDataOff = 0;
+            temp.annotationsOff = 0;
         }
-
-        clazz = dvmDefineClass(pDvmDex, descriptor, loader);
-
-        if (!clazz)
+        else 
         {
-            continue;
-        }
+            ClassObject *clazz = dvmDefineClass(pDvmDex, descriptor, loader);
 
-        ALOGI("GOT IT class: %s", descriptor);
-
-        if (!dvmIsClassInitialized(clazz))
-        {
-            if (dvmInitClass(clazz))
+            if (!clazz)
             {
-                ALOGI("GOT IT init: %s", descriptor);
+                continue;
             }
+
+            ALOGI("GOT IT class: %s", descriptor);
+
+            if (!dvmIsClassInitialized(clazz))
+            {
+                if (dvmInitClass(clazz))
+                {
+                    ALOGI("GOT IT init: %s", descriptor);
+                }
+            }
+
+            if (pClassDef->classDataOff < dataStart || pClassDef->classDataOff > dataEnd)
+            {
+                need_extra = true;
+            }
+
+
+            if (!pData)
+            {
+                continue;
+            }
+
+            need_extra = need_extra || fixClassDataMethod(pData->directMethods, clazz->directMethods, pData->header.directMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
+            
+            
+            need_extra = need_extra || fixClassDataMethod(pData->virtualMethods, clazz->virtualMethods, pData->header.virtualMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
         }
-
-        if (pClassDef->classDataOff < dataStart || pClassDef->classDataOff > dataEnd)
-        {
-            need_extra = true;
-        }
-
-        data = dexGetClassData(pDexFile, pClassDef);
-        pData = ReadClassData(&data);
-
-        if (!pData)
-        {
-            continue;
-        }
-
-        need_extra = need_extra || fixClassDataMethod(pData->directMethods, clazz->directMethods, pData->header.directMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
-        
-        
-        need_extra = need_extra || fixClassDataMethod(pData->virtualMethods, clazz->virtualMethods, pData->header.virtualMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
-
-
-    classdef:
-        DexClassDef temp = *pClassDef;
-        uint8_t *p = (uint8_t *)&temp;
 
         if (need_extra)
         {
@@ -529,20 +524,11 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
         }
         else
         {
-            if (pData)
-            {
-                free(pData);
-            }
-        }
-
-        if (pass)
-        {
-            temp.classDataOff = 0;
-            temp.annotationsOff = 0;
+            free(pData);
         }
 
         ALOGI("GOT IT classdef");
-        fwrite(p, sizeof(DexClassDef), 1, fpDef);
+        fwrite(&temp, sizeof(DexClassDef), 1, fpDef);
         fflush(fpDef);
     }
 
