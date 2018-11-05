@@ -11,6 +11,8 @@
 #include <set>
 #include <cstdio>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #define TAG "unshell"
 
 
@@ -30,25 +32,40 @@ EXPORT bool dvmInitClass(ClassObject* clazz)
 
 */
 struct Arg{
-    DvmDex* pDvmDex;
-    Object * loader;
+    DvmDex *pDvmDex;
+    Object *loader;
+
+    char dumpDir[255];
+    char dexName[100];
 }param;
 
 void *dvmH = dlopen("libdvm.so", RTLD_NOW);
 
-static void *dumpClass(void *param) {
+void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Object *loader);
+
+static void *dumpThread(void *param) {
+    Arg *p = (Arg*)param;
+
+    __android_log_print(ANDROID_LOG_INFO, TAG, "in dumpThread %s %s %p %p", p->dumpDir, p->dexName, p->pDvmDex, p->loader);
+
+    dumpClass(p->dumpDir, p->dexName, p->pDvmDex, p->loader);
     return 0;
 }
 
-static void createDumpThread(DvmDex *pDvmDex, Object *loader) {
+static void createDumpThread(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object *loader) {
     dvmCreateInternalThreadFun dvmCreateInternalThread = (dvmCreateInternalThreadFun)dlsym(dvmH, "_Z23dvmCreateInternalThreadPlPKcPFPvS2_ES2_");
+    
+    __android_log_print(ANDROID_LOG_INFO, TAG, "dvmCreateInternalThread %p", dvmCreateInternalThread);
+    
     Arg param;
 
     param.loader=loader;
     param.pDvmDex=pDvmDex;
+    strcpy(param.dumpDir, dumpDir);
+    strcpy(param.dexName, dexName);
 
     pthread_t dumpthread;
-    dvmCreateInternalThread(&dumpthread, "ClassDumper", dumpClass, (void*)&param);                             
+    dvmCreateInternalThread(&dumpthread, "ClassDumper", dumpThread, (void*)&param);                             
 
 }
 
@@ -79,10 +96,15 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
 
     //begin dump
 
-    const char *outputDir = "/data/local/tmp/";
-    char outputPath[256] = {0};
-    sprintf(outputPath, "%s/%s_%u_%d.dex", outputDir, pkgName, getpid(), s_addrHasDump.size());
+    char outputDir[255] = {0};
+    sprintf(outputDir, "/data/local/tmp_%d", getpid());
+    mkdir(outputDir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
+    char outputPath[256] = {0};
+    sprintf(outputPath, "%s/%s_%u.dex", outputDir, pkgName, s_addrHasDump.size());
+    createDumpThread(outputDir, outputPath, pDvmDex, loader);
+
+/*
     __android_log_print(ANDROID_LOG_INFO, TAG, "dumping to %s", outputPath);
     __android_log_print(ANDROID_LOG_INFO, TAG, "hello %s addr %p len %d baseAddr %p baseLen %d", fileName, memMap.addr, memMap.length, memMap.baseAddr, memMap.baseLength);
     FILE *fdex = fopen(outputPath, "w");
@@ -93,5 +115,6 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
     fwrite(memMap.addr, 1, memMap.length, fdex);
     __android_log_print(ANDROID_LOG_INFO, TAG, "file has writed ok");
     fclose(fdex);
+    */
 
 }
