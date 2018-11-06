@@ -312,8 +312,12 @@ static void writeExceptClassDef(const char *dumpDir, DvmDex *pDvmDex) {
     sprintf(temp, "%s/part1", dumpDir);
     FILE *fpDef = fopen(temp, "wb");
     const u1 *addr = (const u1*)mem->addr;
-    int length=int(pDexFile->baseAddr+pDexFile->pHeader->classDefsOff-addr);
+    ALOGI("before print");
+    ALOGI("%p %p %d %d", pDexFile, pDexFile->baseAddr, pDexFile->pHeader->classDefsOff, mem->length);
+    int length=(int)(pDexFile->baseAddr+pDexFile->pHeader->classDefsOff-addr);
+    ALOGI("length %d", length);
     fwrite(addr,1,length,fpDef);
+    ALOGI("after write");
     fclose(fpDef);
 
 
@@ -327,21 +331,26 @@ static void writeExceptClassDef(const char *dumpDir, DvmDex *pDvmDex) {
 
 static void appenFileTo(const char *path, FILE *targetFd) 
 {
-    int fd = open(path, O_RDONLY, 0666);
-    if (fd == -1)
+    ALOGI("func %s %s %p", __FUNCTION__, path, targetFd);
+    FILE *f = fopen(path, "rb");
+    if (!f)
     {
         return;
     }
 
-    struct stat st = {0};
-    int r = fstat(fd, &st);
+    char buf[255] = {0};
 
-    int len = st.st_size;
-    char *addr = (char *)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
-    fwrite(addr, 1, len, targetFd);
+    size_t r = 0;
+    while (1)
+    {
+        r = fread(buf, 1, sizeof(buf), f);
+        if (!r)
+            break;
+        fwrite(buf, 1, r, targetFd);
+    }
     fflush(targetFd);
-    munmap(addr, len);
-    close(fd);
+    fclose(f);
+    ALOGI("end func %s", __FUNCTION__);
 }
 
 static bool fixClassDataMethod(DexMethod *methods, Method *actualMethods, size_t numMethods, DexFile *pDexFile, int dataStart, int dataEnd, FILE *fpExtra, uint32_t &total_pointer)
@@ -421,7 +430,7 @@ static bool fixClassDataMethod(DexMethod *methods, Method *actualMethods, size_t
     return need_extra;
 }
 
-void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Object *loader)
+void dumpClass(const char *dumpDir, const char *outputDexPath, DvmDex *pDvmDex, Object *loader)
 {
     writeExceptClassDef(dumpDir, pDvmDex);
 
@@ -528,16 +537,20 @@ void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Obj
         }
 
         ALOGI("GOT IT classdef");
+
+        ALOGI("need extra %d", need_extra);
         fwrite(&temp, sizeof(DexClassDef), 1, fpDef);
+        ALOGI("after write def");
         fflush(fpDef);
     }
 
     fclose(fpExtra);
     fclose(fpDef);
 
-    sprintf(path, "%s/%s", dumpDir, outDexName);
-    FILE *fpDex = fopen(path, "wb");
-    rewind(fpDex);
+    ALOGI("after close def");
+
+    FILE *fpDex = fopen(outputDexPath, "wb");
+    ALOGI("fpDex %s %p", path, fpDex);
 
     sprintf(path, "%s/part1", dumpDir);
     

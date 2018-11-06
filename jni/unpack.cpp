@@ -37,7 +37,7 @@ struct Arg{
 
     char dumpDir[255];
     char dexName[100];
-}param;
+};
 
 void *dvmH = dlopen("libdvm.so", RTLD_NOW);
 
@@ -57,23 +57,23 @@ static void createDumpThread(const char *dumpDir, const char *dexName, DvmDex *p
     
     __android_log_print(ANDROID_LOG_INFO, TAG, "dvmCreateInternalThread %p", dvmCreateInternalThread);
     
-    Arg param;
-
-    param.loader=loader;
-    param.pDvmDex=pDvmDex;
-    strcpy(param.dumpDir, dumpDir);
-    strcpy(param.dexName, dexName);
+    //memory leak but just for dump is ok here
+    Arg *param = (Arg*)malloc(sizeof(Arg));
+    param->loader=loader;
+    param->pDvmDex=pDvmDex;
+    strcpy(param->dumpDir, dumpDir);
+    strcpy(param->dexName, dexName);
 
     pthread_t dumpthread;
-    dvmCreateInternalThread(&dumpthread, "ClassDumper", dumpThread, (void*)&param);                             
+    dvmCreateInternalThread(&dumpthread, "ClassDumper", dumpThread, (void*)param);                             
 
 }
 
 using namespace std;
 static set<void*> s_addrHasDump; 
 extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Object *loader) {
-    //const char *pkgName = "cn.missfresh.application";
-    const char *pkgName = "com.pmp.ppmoney";
+    const char *pkgName = "cn.missfresh.application";
+    //const char *pkgName = "com.pmp.ppmoney";
     const char *path = "/proc/self/cmdline";
     char buf[300] = {0};
     FILE *f = fopen(path, "rb");
@@ -97,7 +97,7 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
     //begin dump
 
     char outputDir[255] = {0};
-    sprintf(outputDir, "/data/local/tmp_%d", getpid());
+    sprintf(outputDir, "/data/local/tmp/tmp_%d", getpid());
     mkdir(outputDir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
     char outputPath[256] = {0};
