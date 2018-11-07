@@ -303,13 +303,13 @@ static uint8_t *codeitem_end(const u1 **pData)
     return (uint8_t *)(*pData);
 }
 
-static void writeExceptClassDef(const char *dumpDir, DvmDex *pDvmDex) {
+static void writeExceptClassDef(const char *tmpDir, DvmDex *pDvmDex) {
 
     DexFile* pDexFile=pDvmDex->pDexFile;
     MemMapping * mem=&pDvmDex->memMap;
 
     char temp[255] = {0};
-    sprintf(temp, "%s/part1", dumpDir);
+    sprintf(temp, "%s/part1", tmpDir);
     FILE *fpDef = fopen(temp, "wb");
     const u1 *addr = (const u1*)mem->addr;
     ALOGI("before print");
@@ -321,7 +321,7 @@ static void writeExceptClassDef(const char *dumpDir, DvmDex *pDvmDex) {
     fclose(fpDef);
 
 
-    sprintf(temp, "%s/data", dumpDir);
+    sprintf(temp, "%s/data", tmpDir);
     fpDef = fopen(temp, "wb");
     addr = pDexFile->baseAddr+pDexFile->pHeader->classDefsOff+sizeof(DexClassDef)*pDexFile->pHeader->classDefsSize;
     length=int((const u1*)mem->addr+mem->length-addr);
@@ -430,18 +430,23 @@ static bool fixClassDataMethod(DexMethod *methods, Method *actualMethods, size_t
     return need_extra;
 }
 
-void dumpClass(const char *dumpDir, const char *outputDexPath, DvmDex *pDvmDex, Object *loader)
+void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object *loader)
 {
-    writeExceptClassDef(dumpDir, pDvmDex);
+    char tmpDir[255] = {0};
+    sprintf(tmpDir, "%s/%s-tmp", dumpDir, dexName);
+
+    mkdir(tmpDir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+
+    writeExceptClassDef(tmpDir, pDvmDex);
 
     DexFile *pDexFile = pDvmDex->pDexFile;
     MemMapping *mem = &pDvmDex->memMap;
 
     char path[255] = {0};
-    sprintf(path, "%s/classdef", dumpDir);
+    sprintf(path, "%s/classdef", tmpDir);
     FILE *fpDef = fopen(path, "wb");
 
-    sprintf(path, "%s/extra", dumpDir);
+    sprintf(path, "%s/extra", tmpDir);
     FILE *fpExtra = fopen(path, "wb");
 
     const char *header = "Landroid";
@@ -549,18 +554,20 @@ void dumpClass(const char *dumpDir, const char *outputDexPath, DvmDex *pDvmDex, 
 
     ALOGI("after close def");
 
-    FILE *fpDex = fopen(outputDexPath, "wb");
+    char dexPath[255]={0};
+    sprintf(dexPath, "%s/%s", dumpDir, dexName);
+    FILE *fpDex = fopen(dexPath, "wb");
     ALOGI("fpDex %s %p", path, fpDex);
 
-    sprintf(path, "%s/part1", dumpDir);
+    sprintf(path, "%s/part1", tmpDir);
     
     appenFileTo(path, fpDex);
 
-    sprintf(path, "%s/classdef", dumpDir);
+    sprintf(path, "%s/classdef", tmpDir);
 
     appenFileTo(path, fpDex);
 
-    sprintf(path, "%s/data", dumpDir);
+    sprintf(path, "%s/data", tmpDir);
 
     appenFileTo(path, fpDex);
 
@@ -571,7 +578,7 @@ void dumpClass(const char *dumpDir, const char *outputDexPath, DvmDex *pDvmDex, 
         inc--;
     }
 
-    sprintf(path, "%s/extra", dumpDir);
+    sprintf(path, "%s/extra", tmpDir);
 
     appenFileTo(path, fpDex);
 

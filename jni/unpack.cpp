@@ -100,9 +100,9 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
     sprintf(outputDir, "/data/local/tmp/tmp_%d", getpid());
     mkdir(outputDir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
-    char outputPath[256] = {0};
-    sprintf(outputPath, "%s/%s_%u.dex", outputDir, pkgName, s_addrHasDump.size());
-    createDumpThread(outputDir, outputPath, pDvmDex, loader);
+    char dexName[256] = {0};
+    sprintf(dexName, "%s_%u.dex", pkgName, s_addrHasDump.size());
+    createDumpThread(outputDir, dexName, pDvmDex, loader);
 
 /*
     __android_log_print(ANDROID_LOG_INFO, TAG, "dumping to %s", outputPath);
