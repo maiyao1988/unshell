@@ -38,11 +38,15 @@ typedef bool (*dvmInitClassFunc)(ClassObject* clazz);
 
 typedef ClassObject *(*dvmDefineClassFunc)(DvmDex *, char const*, Object *);
 
+typedef void *(*dvmThreadSelfFunc)();
+
 dvmIsClassInitializedFunc dvmIsClassInitialized = (dvmIsClassInitializedFunc)dlsym(dvmH, "_Z21dvmIsClassInitializedPK11ClassObject");
 
 dvmInitClassFunc dvmInitClass = (dvmInitClassFunc)dlsym(dvmH, "dvmInitClass");
 
 dvmDefineClassFunc dvmDefineClass = (dvmDefineClassFunc)dlsym(dvmH, "_Z14dvmDefineClassP6DvmDexPKcP6Object");
+
+dvmThreadSelfFunc dvmThreadSelf = (dvmThreadSelfFunc)dlsym(dvmH, "_Z13dvmThreadSelfv");
 
 
 static void ReadClassDataHeader(const uint8_t **pData,
@@ -303,13 +307,13 @@ static uint8_t *codeitem_end(const u1 **pData)
     return (uint8_t *)(*pData);
 }
 
-static void writeExceptClassDef(const char *tmpDir, DvmDex *pDvmDex) {
+static void writeExceptClassDef(const char *outDir, DvmDex *pDvmDex) {
 
     DexFile* pDexFile=pDvmDex->pDexFile;
     MemMapping * mem=&pDvmDex->memMap;
 
     char temp[255] = {0};
-    sprintf(temp, "%s/part1", tmpDir);
+    sprintf(temp, "%s/part1", outDir);
     FILE *fpDef = fopen(temp, "wb");
     const u1 *addr = (const u1*)mem->addr;
     ALOGI("before print");
@@ -321,7 +325,7 @@ static void writeExceptClassDef(const char *tmpDir, DvmDex *pDvmDex) {
     fclose(fpDef);
 
 
-    sprintf(temp, "%s/data", tmpDir);
+    sprintf(temp, "%s/data", outDir);
     fpDef = fopen(temp, "wb");
     addr = pDexFile->baseAddr+pDexFile->pHeader->classDefsOff+sizeof(DexClassDef)*pDexFile->pHeader->classDefsSize;
     length=int((const u1*)mem->addr+mem->length-addr);
@@ -364,7 +368,7 @@ static bool fixClassDataMethod(DexMethod *methods, Method *actualMethods, size_t
             Method *method = &(actualMethods[i]);
             uint32_t ac = (method->accessFlags) & mask;
 
-            ALOGI("GOT IT method name %s", method->name);
+            //ALOGI("GOT IT method name %s", method->name);
 
             if (!method->insns || ac & ACC_NATIVE)
             {
@@ -381,14 +385,14 @@ static bool fixClassDataMethod(DexMethod *methods, Method *actualMethods, size_t
 
             if (ac != methods[i].accessFlags)
             {
-                ALOGI("GOT IT method ac");
+                //ALOGI("GOT IT method ac");
                 need_extra = true;
                 methods[i].accessFlags = ac;
             }
 
             if (codeitem_off != methods[i].codeOff && ((codeitem_off >= dataStart && codeitem_off <= dataEnd) || codeitem_off == 0))
             {
-                ALOGI("GOT IT method code");
+                //ALOGI("GOT IT method code");
                 need_extra = true;
                 methods[i].codeOff = codeitem_off;
             }
@@ -412,7 +416,7 @@ static bool fixClassDataMethod(DexMethod *methods, Method *actualMethods, size_t
                     code_item_len = 16 + code->insnsSize * 2;
                 }
 
-                ALOGI("GOT IT method code changed");
+                //ALOGI("GOT IT method code changed");
 
                 fwrite(item, 1, code_item_len, fpExtra);
                 fflush(fpExtra);
@@ -463,6 +467,10 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
     uint32_t dataStart = pDexFile->pHeader->classDefsOff + sizeof(DexClassDef) * num_class_defs;
     uint32_t dataEnd = (uint32_t)((const u1 *)mem->addr + mem->length - pDexFile->baseAddr);
 
+    void *self = dvmThreadSelf();
+
+
+
     for (size_t i = 0; i < num_class_defs; i++)
     {
         bool need_extra = false;
@@ -482,8 +490,18 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
         {
             ClassObject *clazz = dvmDefineClass(pDvmDex, descriptor, loader);
 
+            char *ptr = (char*)self;
+
+            //clear exception
+            ALOGI("get exception 0x%08x", *(unsigned*)(ptr+68));
+
+            //equal to self->exception=0;
+            *(unsigned*)(ptr+68) = 0;
+            ALOGI("after set exception");
+
             if (!clazz)
             {
+                ALOGI("defineclass: %s return null", descriptor);
                 continue;
             }
 
@@ -491,10 +509,12 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
 
             if (!dvmIsClassInitialized(clazz))
             {
+                /*
                 if (dvmInitClass(clazz))
                 {
                     ALOGI("GOT IT init: %s", descriptor);
                 }
+                */
             }
 
             if (pClassDef->classDataOff < dataStart || pClassDef->classDataOff > dataEnd)
@@ -583,6 +603,6 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
     appenFileTo(path, fpDex);
 
     fclose(fpDex);
+    ALOGI("here write dex %s return", dexPath);
 
-    return;
 }
