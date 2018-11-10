@@ -281,7 +281,6 @@ static uint8_t *EncodeClassData(DexClassData *pData, int &len)
         }
     }
 
-    free(pData);
     return result;
 }
 
@@ -507,42 +506,38 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
             *(unsigned*)(ptr+68) = 0;
             MYLOG("after set exception");
 
-            if (!clazz)
+            if (clazz)
+            {
+                MYLOG("GOT IT class: %s", descriptor);
+                if (!dvmIsClassInitialized(clazz))
+                {
+                    /*
+                    if (dvmInitClass(clazz))
+                    {
+                        MYLOG("GOT IT init: %s", descriptor);
+                    }
+                    */
+                }
+
+                if (pClassDef->classDataOff < dataStart || pClassDef->classDataOff > dataEnd)
+                {
+                    need_extra = true;
+                }
+
+                if (pData)
+                {
+                    need_extra = need_extra || fixClassDataMethod(pData->directMethods, clazz->directMethods, pData->header.directMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
+                    need_extra = need_extra || fixClassDataMethod(pData->virtualMethods, clazz->virtualMethods, pData->header.virtualMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
+                }
+            }
+            else 
             {
                 MYLOG("defineclass: %s return null", descriptor);
-                continue;
             }
 
-            MYLOG("GOT IT class: %s", descriptor);
-
-            if (!dvmIsClassInitialized(clazz))
-            {
-                /*
-                if (dvmInitClass(clazz))
-                {
-                    MYLOG("GOT IT init: %s", descriptor);
-                }
-                */
-            }
-
-            if (pClassDef->classDataOff < dataStart || pClassDef->classDataOff > dataEnd)
-            {
-                need_extra = true;
-            }
-
-
-            if (!pData)
-            {
-                continue;
-            }
-
-            need_extra = need_extra || fixClassDataMethod(pData->directMethods, clazz->directMethods, pData->header.directMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
-            
-            
-            need_extra = need_extra || fixClassDataMethod(pData->virtualMethods, clazz->virtualMethods, pData->header.virtualMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
         }
 
-        if (need_extra)
+        if (need_extra && pData)
         {
             MYLOG("GOT IT classdata before");
             int class_data_len = 0;
@@ -564,10 +559,7 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
             free(out);
             MYLOG("GOT IT classdata written");
         }
-        else
-        {
-            free(pData);
-        }
+        free(pData);
 
         MYLOG("GOT IT classdef");
 
