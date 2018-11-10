@@ -18,6 +18,8 @@
 #include <sys/types.h>
 #include <fcntl.h>
 
+#define MYLOG(...) \
+    __android_log_print(ANDROID_LOG_INFO, "unshell", __VA_ARGS__);
 /*
 
 ; dvmIsClassInitialized(ClassObject const*)
@@ -309,33 +311,36 @@ static uint8_t *codeitem_end(const u1 **pData)
 
 static void writeExceptClassDef(const char *outDir, DvmDex *pDvmDex) {
 
-    DexFile* pDexFile=pDvmDex->pDexFile;
-    MemMapping * mem=&pDvmDex->memMap;
+    DexFile *pDexFile=pDvmDex->pDexFile;
+    MemMapping *mem=&pDvmDex->memMap;
+    MYLOG("In %s mem_addr:%p, mem_len:%d", __FUNCTION__, mem->addr, mem->length);
 
     char temp[255] = {0};
     sprintf(temp, "%s/part1", outDir);
     FILE *fpDef = fopen(temp, "wb");
-    const u1 *addr = (const u1*)mem->addr;
-    ALOGI("before print");
-    ALOGI("%p %p %d %d", pDexFile, pDexFile->baseAddr, pDexFile->pHeader->classDefsOff, mem->length);
-    int length=(int)(pDexFile->baseAddr+pDexFile->pHeader->classDefsOff-addr);
-    ALOGI("length %d", length);
-    fwrite(addr,1,length,fpDef);
-    ALOGI("after write");
+    const u1 *mapBase = (const u1*)mem->addr;
+    MYLOG("before print");
+    const u1 *classDefBase = pDexFile->baseAddr+pDexFile->pHeader->classDefsOff;
+    MYLOG("%p %p %d %d", pDexFile, pDexFile->baseAddr, pDexFile->pHeader->classDefsOff, mem->length);
+    int length=(int)(classDefBase-mapBase);
+    MYLOG("length %d", length);
+    fwrite(mapBase,1,length,fpDef);
+    MYLOG("after write part1 length:%d", length);
     fclose(fpDef);
 
-
+    size_t totalclsDefSize = sizeof(DexClassDef)*pDexFile->pHeader->classDefsSize;
     sprintf(temp, "%s/data", outDir);
     fpDef = fopen(temp, "wb");
-    addr = pDexFile->baseAddr+pDexFile->pHeader->classDefsOff+sizeof(DexClassDef)*pDexFile->pHeader->classDefsSize;
-    length=int((const u1*)mem->addr+mem->length-addr);
-    fwrite(addr,1,length,fpDef);
+    const u1 *addrAfterClassDefs = classDefBase+totalclsDefSize;
+    length=int((const u1*)mem->addr+mem->length-addrAfterClassDefs);
+    fwrite(addrAfterClassDefs,1,length,fpDef);
+    MYLOG("after write data length:%d", length);
     fclose(fpDef);
 }
 
 static void appenFileTo(const char *path, FILE *targetFd) 
 {
-    ALOGI("func %s %s %p", __FUNCTION__, path, targetFd);
+    MYLOG("func %s %s %p", __FUNCTION__, path, targetFd);
     FILE *f = fopen(path, "rb");
     if (!f)
     {
@@ -345,63 +350,69 @@ static void appenFileTo(const char *path, FILE *targetFd)
     char buf[255] = {0};
 
     size_t r = 0;
+    unsigned len = 0;
     while (1)
     {
         r = fread(buf, 1, sizeof(buf), f);
         if (!r)
             break;
-        fwrite(buf, 1, r, targetFd);
+        len += fwrite(buf, 1, r, targetFd);
     }
     fflush(targetFd);
     fclose(f);
-    ALOGI("end func %s", __FUNCTION__);
+
+    MYLOG("end func %s, appen %d", __FUNCTION__, len);
 }
 
-static bool fixClassDataMethod(DexMethod *methods, Method *actualMethods, size_t numMethods, DexFile *pDexFile, int dataStart, int dataEnd, FILE *fpExtra, uint32_t &total_pointer)
+static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, size_t numMethods, DexFile *pDexFile, int dataStart, int dataEnd, FILE *fpExtra, uint32_t &total_pointer)
 {
     const uint32_t mask = 0x3ffff;
     bool need_extra = false;
-    if (methods)
+    if (methodsToFix)
     {
         for (uint32_t i = 0; i < numMethods; i++)
         {
-            Method *method = &(actualMethods[i]);
-            uint32_t ac = (method->accessFlags) & mask;
+            Method *actualMethod = &(actualMethods[i]);
+            uint32_t realAc = (actualMethod->accessFlags) & mask;
 
-            //ALOGI("GOT IT method name %s", method->name);
+            MYLOG("GOT IT method name %s", actualMethod->name);
 
-            if (!method->insns || ac & ACC_NATIVE)
+            if (!actualMethod->insns || realAc & ACC_NATIVE)
             {
-                if (methods[i].codeOff)
+                if (methodsToFix[i].codeOff)
                 {
+                    //真实函数是native，但是待修复函数却有codeoff，休要修复
                     need_extra = true;
-                    methods[i].accessFlags = ac;
-                    methods[i].codeOff = 0;
+                    methodsToFix[i].accessFlags = realAc;
+                    methodsToFix[i].codeOff = 0;
                 }
                 continue;
             }
 
-            u4 codeitem_off = u4((const u1 *)method->insns - 16 - pDexFile->baseAddr);
+            u4 realCodeOff = u4((const u1 *)actualMethod->insns - 16 - pDexFile->baseAddr);
 
-            if (ac != methods[i].accessFlags)
+            if (realAc != methodsToFix[i].accessFlags)
             {
-                //ALOGI("GOT IT method ac");
+                //真实函数与待修复函数accessFlags不一致的，休要修复
+                //MYLOG("GOT IT method realAc");
                 need_extra = true;
-                methods[i].accessFlags = ac;
+                methodsToFix[i].accessFlags = realAc;
             }
 
-            if (codeitem_off != methods[i].codeOff && ((codeitem_off >= dataStart && codeitem_off <= dataEnd) || codeitem_off == 0))
+            if (realCodeOff != methodsToFix[i].codeOff && ((realCodeOff >= dataStart && realCodeOff <= dataEnd) || realCodeOff == 0))
             {
-                //ALOGI("GOT IT method code");
+                //code off不一致，且codeoff在map范围内
+                MYLOG("GOT IT method code");
                 need_extra = true;
-                methods[i].codeOff = codeitem_off;
+                methodsToFix[i].codeOff = realCodeOff;
             }
 
-            if ((codeitem_off < dataStart || codeitem_off > dataEnd) && codeitem_off != 0)
+            if ((realCodeOff < dataStart || realCodeOff > dataEnd) && realCodeOff != 0)
             {
+                //真实codeoff超出data范围的，需要修复
                 need_extra = true;
-                methods[i].codeOff = total_pointer;
-                DexCode *code = (DexCode *)((const u1 *)method->insns - 16);
+                methodsToFix[i].codeOff = total_pointer;
+                DexCode *code = (DexCode *)((const u1 *)actualMethod->insns - 16);
                 uint8_t *item = (uint8_t *)code;
                 int code_item_len = 0;
                 if (code->triesSize)
@@ -416,18 +427,17 @@ static bool fixClassDataMethod(DexMethod *methods, Method *actualMethods, size_t
                     code_item_len = 16 + code->insnsSize * 2;
                 }
 
-                //ALOGI("GOT IT method code changed");
+                //MYLOG("GOT IT method code changed");
 
                 fwrite(item, 1, code_item_len, fpExtra);
-                fflush(fpExtra);
                 total_pointer += code_item_len;
                 while (total_pointer & 3)
                 {
                     //对齐
                     fputc(0, fpExtra);
-                    fflush(fpExtra);
                     total_pointer++;
                 }
+                fflush(fpExtra);
             }
         }
     }
@@ -469,22 +479,20 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
 
     void *self = dvmThreadSelf();
 
-
-
     for (size_t i = 0; i < num_class_defs; i++)
     {
         bool need_extra = false;
         const DexClassDef *pClassDef = dexGetClassDef(pDvmDex->pDexFile, i);
-        DexClassDef temp = *pClassDef;
+        DexClassDef classdef = *pClassDef;
         const char *descriptor = dexGetClassDescriptor(pDvmDex->pDexFile, pClassDef);
 
         const u1 *data = dexGetClassData(pDexFile, pClassDef);
         DexClassData *pData = ReadClassData(&data);
 
-        if (!strncmp(header, descriptor, 8) || !pClassDef->classDataOff)
+        if (strncmp(header, descriptor, 8) == 0|| !pClassDef->classDataOff)
         {
-            temp.classDataOff = 0;
-            temp.annotationsOff = 0;
+            classdef.classDataOff = 0;
+            classdef.annotationsOff = 0;
         }
         else 
         {
@@ -493,26 +501,26 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
             char *ptr = (char*)self;
 
             //clear exception
-            ALOGI("get exception 0x%08x", *(unsigned*)(ptr+68));
+            MYLOG("get exception 0x%08x", *(unsigned*)(ptr+68));
 
             //equal to self->exception=0;
             *(unsigned*)(ptr+68) = 0;
-            ALOGI("after set exception");
+            MYLOG("after set exception");
 
             if (!clazz)
             {
-                ALOGI("defineclass: %s return null", descriptor);
+                MYLOG("defineclass: %s return null", descriptor);
                 continue;
             }
 
-            ALOGI("GOT IT class: %s", descriptor);
+            MYLOG("GOT IT class: %s", descriptor);
 
             if (!dvmIsClassInitialized(clazz))
             {
                 /*
                 if (dvmInitClass(clazz))
                 {
-                    ALOGI("GOT IT init: %s", descriptor);
+                    MYLOG("GOT IT init: %s", descriptor);
                 }
                 */
             }
@@ -536,14 +544,14 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
 
         if (need_extra)
         {
-            ALOGI("GOT IT classdata before");
+            MYLOG("GOT IT classdata before");
             int class_data_len = 0;
             uint8_t *out = EncodeClassData(pData, class_data_len);
             if (!out)
             {
                 continue;
             }
-            temp.classDataOff = total_pointer;
+            classdef.classDataOff = total_pointer;
             fwrite(out, 1, class_data_len, fpExtra);
             fflush(fpExtra);
             total_pointer += class_data_len;
@@ -554,30 +562,30 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
                 total_pointer++;
             }
             free(out);
-            ALOGI("GOT IT classdata written");
+            MYLOG("GOT IT classdata written");
         }
         else
         {
             free(pData);
         }
 
-        ALOGI("GOT IT classdef");
+        MYLOG("GOT IT classdef");
 
-        ALOGI("need extra %d", need_extra);
-        fwrite(&temp, sizeof(DexClassDef), 1, fpDef);
-        ALOGI("after write def");
+        MYLOG("need extra %d", need_extra);
+        fwrite(&classdef, sizeof(classdef), 1, fpDef);
+        MYLOG("after write def");
         fflush(fpDef);
     }
 
     fclose(fpExtra);
     fclose(fpDef);
 
-    ALOGI("after close def");
+    MYLOG("after close def");
 
     char dexPath[255]={0};
     sprintf(dexPath, "%s/%s", dumpDir, dexName);
     FILE *fpDex = fopen(dexPath, "wb");
-    ALOGI("fpDex %s %p", path, fpDex);
+    MYLOG("fpDex %s %p", path, fpDex);
 
     sprintf(path, "%s/part1", tmpDir);
     
@@ -594,15 +602,15 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
     while (inc > 0)
     {
         fputc(0, fpExtra);
-        fflush(fpDex);
         inc--;
     }
+    fflush(fpDex);
 
     sprintf(path, "%s/extra", tmpDir);
 
     appenFileTo(path, fpDex);
 
     fclose(fpDex);
-    ALOGI("here write dex %s return", dexPath);
+    MYLOG("here write dex %s return", dexPath);
 
 }
