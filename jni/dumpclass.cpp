@@ -2,6 +2,7 @@
 #include "vm/Common.h"
 #include "libdex/DexProto.h"
 #include "libdex/DexFile.h"
+#include "libdex/DexOptData.h"
 #include "libdex/Leb128.h"
 #include "libdex/DexClass.h"
 #include "vm/DvmDex.h"
@@ -363,6 +364,31 @@ static void appenFileTo(const char *path, FILE *targetFd)
     MYLOG("end func %s, appen %d", __FUNCTION__, len);
 }
 
+static void fixDexCheckSum(const char *dexPath)
+{
+    int fd = open(dexPath, O_RDWR);
+    struct stat st = {0};
+    fstat(fd,&st);
+    unsigned len = st.st_size;
+    const u1 *addr = (const u1*)mmap(NULL,len,PROT_READ|PROT_WRITE,MAP_PRIVATE,fd,0);
+    DexFile *dex = dexFileParse(addr, len, kDexParseContinueOnError);
+    if (dex->pOptHeader)
+    {
+        u4 optChecksum = dexComputeOptChecksum(dex->pOptHeader);
+        MYLOG("regen dex opt checksum = %0x08x", optChecksum);
+        ((DexOptHeader*)(dex->pOptHeader))->checksum = optChecksum;
+    }
+    if (dex->pHeader)
+    {
+        u4 checksum = dexComputeOptChecksum(dex->pOptHeader);
+        MYLOG("regen dex checksum = %0x08x", checksum);
+        ((DexHeader*)(dex->pHeader))->checksum = checksum;
+    }
+    dexFileFree(dex);
+    munmap((void*)addr, len);
+    close(fd);
+}
+
 static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, size_t numMethods, DexFile *pDexFile, int dataStart, int dataEnd, FILE *fpExtra, uint32_t &total_pointer)
 {
     const uint32_t mask = 0x3ffff;
@@ -602,4 +628,7 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
     fclose(fpDex);
     MYLOG("here write dex %s return %d writed", dexPath, sz);
 
+    fixDexCheckSum(dexPath);
+
+    MYLOG("dex %s checksum has fix", dexPath);
 }

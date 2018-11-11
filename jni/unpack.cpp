@@ -2,6 +2,7 @@
 #include "vm/Common.h"
 #include "libdex/DexProto.h"
 #include "libdex/DexFile.h"
+#include "libdex/DexOptData.h"
 #include "vm/DvmDex.h"
 #include "vm/oo/Object.h"
 #include <jni.h>
