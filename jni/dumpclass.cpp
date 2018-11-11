@@ -380,7 +380,7 @@ static void fixDexCheckSum(const char *dexPath)
     }
     if (dex->pHeader)
     {
-        u4 checksum = dexComputeOptChecksum(dex->pOptHeader);
+        u4 checksum = dexComputeChecksum(dex->pHeader);
         MYLOG("regen dex checksum = %0x08x", checksum);
         ((DexHeader*)(dex->pHeader))->checksum = checksum;
     }
