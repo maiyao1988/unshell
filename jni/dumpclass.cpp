@@ -368,6 +368,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
 {
     const uint32_t mask = 0x3ffff;
     bool need_extra = false;
+    char desp[255]={0};
     if (methodsToFix)
     {
         for (uint32_t i = 0; i < numMethods; i++)
@@ -375,8 +376,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
             Method *actualMethod = &(actualMethods[i]);
             uint32_t realAc = (actualMethod->accessFlags) & mask;
 
-            //MYLOG("GOT IT method name %s", actualMethod->name);
-
+            sprintf(desp, "%s->%s", actualMethod->clazz->descriptor, actualMethod->name);
             if (!actualMethod->insns || realAc & ACC_NATIVE)
             {
                 if (methodsToFix[i].codeOff)
@@ -394,7 +394,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
             if (realAc != methodsToFix[i].accessFlags)
             {
                 //真实函数与待修复函数accessFlags不一致的，休要修复
-                MYLOG(" accessFlag not equal %s", actualMethod->name);
+                MYLOG(" accessFlag not equal %s", desp);
                 need_extra = true;
                 methodsToFix[i].accessFlags = realAc;
             }
@@ -402,7 +402,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
             if (realCodeOff != methodsToFix[i].codeOff && ((realCodeOff >= dataStart && realCodeOff <= dataEnd) || realCodeOff == 0))
             {
                 //code off不一致，且codeoff在map范围内
-                MYLOG("codeoff not equal, actual in map %s", actualMethod->name);
+                MYLOG("codeoff not equal, actual in map %s", desp);
                 need_extra = true;
                 methodsToFix[i].codeOff = realCodeOff;
             }
@@ -410,7 +410,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
             if ((realCodeOff < dataStart || realCodeOff > dataEnd) && realCodeOff != 0)
             {
                 //真实codeoff超出data范围的，需要修复
-                MYLOG("codeoff out of range %s", actualMethod->name);
+                MYLOG("codeoff out of range %s", desp);
                 need_extra = true;
                 methodsToFix[i].codeOff = total_pointer;
                 DexCode *code = (DexCode *)((const u1 *)actualMethod->insns - 16);
@@ -427,8 +427,6 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
                 {
                     code_item_len = 16 + code->insnsSize * 2;
                 }
-
-                //MYLOG("GOT IT method code changed");
 
                 fwrite(item, 1, code_item_len, fpExtra);
                 total_pointer += code_item_len;
@@ -541,7 +539,7 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
 
         if (need_extra && pData)
         {
-            MYLOG("GOT IT classdata before");
+            MYLOG("update classData %s", descriptor);
             int class_data_len = 0;
             uint8_t *out = EncodeClassData(pData, class_data_len);
             if (out)
@@ -562,9 +560,8 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
         }
         free(pData);
 
-        MYLOG("need extra %d", need_extra);
         fwrite(&classdef, sizeof(classdef), 1, fpDef);
-        MYLOG("after write def");
+        //MYLOG("after write def");
         fflush(fpDef);
     }
 

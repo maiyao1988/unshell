@@ -72,8 +72,8 @@ static void createDumpThread(const char *dumpDir, const char *dexName, DvmDex *p
 using namespace std;
 static set<void*> s_addrHasDump; 
 extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Object *loader) {
-    const char *pkgName = "cn.missfresh.application";
-    //const char *pkgName = "com.pmp.ppmoney";
+    //const char *pkgName = "cn.missfresh.application";
+    const char *pkgName = "com.pmp.ppmoney";
     const char *path = "/proc/self/cmdline";
     char buf[300] = {0};
     FILE *f = fopen(path, "rb");
