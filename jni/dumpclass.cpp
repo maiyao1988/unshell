@@ -343,6 +343,7 @@ static void appenFileTo(const char *path, FILE *targetFd)
     FILE *f = fopen(path, "rb");
     if (!f)
     {
+        MYLOG("func %s open error", __FUNCTION__);
         return;
     }
 
@@ -374,7 +375,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
             Method *actualMethod = &(actualMethods[i]);
             uint32_t realAc = (actualMethod->accessFlags) & mask;
 
-            MYLOG("GOT IT method name %s", actualMethod->name);
+            //MYLOG("GOT IT method name %s", actualMethod->name);
 
             if (!actualMethod->insns || realAc & ACC_NATIVE)
             {
@@ -393,7 +394,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
             if (realAc != methodsToFix[i].accessFlags)
             {
                 //真实函数与待修复函数accessFlags不一致的，休要修复
-                //MYLOG("GOT IT method realAc");
+                MYLOG(" accessFlag not equal %s", actualMethod->name);
                 need_extra = true;
                 methodsToFix[i].accessFlags = realAc;
             }
@@ -401,7 +402,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
             if (realCodeOff != methodsToFix[i].codeOff && ((realCodeOff >= dataStart && realCodeOff <= dataEnd) || realCodeOff == 0))
             {
                 //code off不一致，且codeoff在map范围内
-                MYLOG("GOT IT method code");
+                MYLOG("codeoff not equal, actual in map %s", actualMethod->name);
                 need_extra = true;
                 methodsToFix[i].codeOff = realCodeOff;
             }
@@ -409,6 +410,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
             if ((realCodeOff < dataStart || realCodeOff > dataEnd) && realCodeOff != 0)
             {
                 //真实codeoff超出data范围的，需要修复
+                MYLOG("codeoff out of range %s", actualMethod->name);
                 need_extra = true;
                 methodsToFix[i].codeOff = total_pointer;
                 DexCode *code = (DexCode *)((const u1 *)actualMethod->insns - 16);
@@ -500,15 +502,15 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
             char *ptr = (char*)self;
 
             //clear exception
-            MYLOG("get exception 0x%08x", *(unsigned*)(ptr+68));
+            //MYLOG("get exception 0x%08x", *(unsigned*)(ptr+68));
 
             //equal to self->exception=0;
             *(unsigned*)(ptr+68) = 0;
-            MYLOG("after set exception");
+            //MYLOG("after set exception");
 
             if (clazz)
             {
-                MYLOG("GOT IT class: %s", descriptor);
+                //MYLOG("GOT IT class: %s", descriptor);
                 if (!dvmIsClassInitialized(clazz))
                 {
                     /*
@@ -542,26 +544,23 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
             MYLOG("GOT IT classdata before");
             int class_data_len = 0;
             uint8_t *out = EncodeClassData(pData, class_data_len);
-            if (!out)
+            if (out)
             {
-                continue;
-            }
-            classdef.classDataOff = total_pointer;
-            fwrite(out, 1, class_data_len, fpExtra);
-            fflush(fpExtra);
-            total_pointer += class_data_len;
-            while (total_pointer & 3)
-            {
-                fputc(0, fpExtra);
+                classdef.classDataOff = total_pointer;
+                fwrite(out, 1, class_data_len, fpExtra);
                 fflush(fpExtra);
-                total_pointer++;
+                total_pointer += class_data_len;
+                while (total_pointer & 3)
+                {
+                    fputc(0, fpExtra);
+                    fflush(fpExtra);
+                    total_pointer++;
+                }
+                free(out);
+                MYLOG("GOT IT classdata written");
             }
-            free(out);
-            MYLOG("GOT IT classdata written");
         }
         free(pData);
-
-        MYLOG("GOT IT classdef");
 
         MYLOG("need extra %d", need_extra);
         fwrite(&classdef, sizeof(classdef), 1, fpDef);
