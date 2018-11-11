@@ -393,15 +393,16 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
             if (realAc != methodsToFix[i].accessFlags)
             {
                 //真实函数与待修复函数accessFlags不一致的，休要修复
-                MYLOG(" accessFlag not equal %s", desp);
+                MYLOG("[%s] accessFlag not equal, expected:0x%08x, actual:0x%08x", desp, methodsToFix[i].accessFlags, realAc);
                 need_extra = true;
                 methodsToFix[i].accessFlags = realAc;
             }
 
             if (realCodeOff != methodsToFix[i].codeOff && ((realCodeOff >= dataStart && realCodeOff <= dataEnd) || realCodeOff == 0))
             {
-                //code off不一致，且codeoff在map范围内
-                MYLOG("codeoff not equal, actual in map %s", desp);
+                //code off不一致，且codeoff在map范围内, 直接将真实codeoff复制过去即可
+                MYLOG("[%s] codeoff not equal to actual in map methodToFix_codeoff:0x%08x, real_codeoff:0x%08x,dataStart:0x%08x, dataEnd:0x%08x", 
+                    desp, methodsToFix[i].codeOff, realCodeOff, dataStart, dataEnd);
                 need_extra = true;
                 methodsToFix[i].codeOff = realCodeOff;
             }
@@ -538,7 +539,7 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
 
         if (need_extra && pData)
         {
-            MYLOG("update classData %s", descriptor);
+            MYLOG("[%s] update classData", descriptor);
             int class_data_len = 0;
             uint8_t *out = EncodeClassData(pData, class_data_len);
             if (out)
