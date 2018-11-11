@@ -401,7 +401,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
             if (realCodeOff != methodsToFix[i].codeOff && ((realCodeOff >= dataStart && realCodeOff <= dataEnd) || realCodeOff == 0))
             {
                 //code off不一致，且codeoff在map范围内, 直接将真实codeoff复制过去即可
-                MYLOG("[%s] codeoff not equal to actual in map methodToFix_codeoff:0x%08x, real_codeoff:0x%08x,dataStart:0x%08x, dataEnd:0x%08x", 
+                MYLOG("[%s] codeoff not equal to actual in map methodToFix_codeoff:0x%08x,real_codeoff:0x%08x,dataStart:0x%08x, dataEnd:0x%08x", 
                     desp, methodsToFix[i].codeOff, realCodeOff, dataStart, dataEnd);
                 need_extra = true;
                 methodsToFix[i].codeOff = realCodeOff;
@@ -410,7 +410,8 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
             if ((realCodeOff < dataStart || realCodeOff > dataEnd) && realCodeOff != 0)
             {
                 //真实codeoff超出data范围的，需要修复
-                MYLOG("codeoff out of range %s", desp);
+                MYLOG("[%s] real_codeoff out of range real_codeoff:0x%08x,dataStart:0x%08x,dataEnd:0x%08x", 
+                    desp, realCodeOff, dataStart, dataEnd);
                 need_extra = true;
                 methodsToFix[i].codeOff = total_pointer;
                 DexCode *code = (DexCode *)((const u1 *)actualMethod->insns - 16);
@@ -521,6 +522,7 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
 
                 if (pClassDef->classDataOff < dataStart || pClassDef->classDataOff > dataEnd)
                 {
+                    MYLOG("[%s] classdata out of range, classDataoff:0x%08x, dataStart:0x%08x, dataEnd:0x%08x", descriptor, pClassDef->classDataOff, dataStart, dataEnd);
                     need_extra = true;
                 }
 
