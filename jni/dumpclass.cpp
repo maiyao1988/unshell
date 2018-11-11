@@ -318,13 +318,12 @@ static void writeExceptClassDef(const char *outDir, DvmDex *pDvmDex) {
     sprintf(temp, "%s/part1", outDir);
     FILE *fpDef = fopen(temp, "wb");
     const u1 *mapBase = (const u1*)mem->addr;
-    MYLOG("before print");
     const u1 *classDefBase = pDexFile->baseAddr+pDexFile->pHeader->classDefsOff;
     MYLOG("%p %p %d %d", pDexFile, pDexFile->baseAddr, pDexFile->pHeader->classDefsOff, mem->length);
     int length=(int)(classDefBase-mapBase);
     MYLOG("length %d", length);
     fwrite(mapBase,1,length,fpDef);
-    MYLOG("after write part1 length:%d", length);
+    MYLOG("after write %s length:%d", temp, length);
     fclose(fpDef);
 
     size_t totalclsDefSize = sizeof(DexClassDef)*pDexFile->pHeader->classDefsSize;
@@ -333,7 +332,7 @@ static void writeExceptClassDef(const char *outDir, DvmDex *pDvmDex) {
     const u1 *addrAfterClassDefs = classDefBase+totalclsDefSize;
     length=int((const u1*)mem->addr+mem->length-addrAfterClassDefs);
     fwrite(addrAfterClassDefs,1,length,fpDef);
-    MYLOG("after write data length:%d", length);
+    MYLOG("after write %s length:%d", temp, length);
     fclose(fpDef);
 }
 
@@ -551,9 +550,9 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
                 while (total_pointer & 3)
                 {
                     fputc(0, fpExtra);
-                    fflush(fpExtra);
                     total_pointer++;
                 }
+                fflush(fpExtra);
                 free(out);
                 MYLOG("GOT IT classdata written");
             }
@@ -598,7 +597,8 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
 
     appenFileTo(path, fpDex);
 
+    int sz = ftell(fpDex);
     fclose(fpDex);
-    MYLOG("here write dex %s return", dexPath);
+    MYLOG("here write dex %s return %d writed", dexPath, sz);
 
 }
