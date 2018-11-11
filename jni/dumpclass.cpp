@@ -5,6 +5,7 @@
 #include "libdex/DexOptData.h"
 #include "libdex/Leb128.h"
 #include "libdex/DexClass.h"
+#include "libdex/sha1.h"
 #include "vm/DvmDex.h"
 #include "vm/oo/Object.h"
 #include <jni.h>
@@ -364,29 +365,59 @@ static void appenFileTo(const char *path, FILE *targetFd)
     MYLOG("end func %s, appen %d", __FUNCTION__, len);
 }
 
-static void fixDexCheckSum(const char *dexPath)
+static void dexComputeSHA1Digest(const unsigned char* data, size_t length,
+    unsigned char digest[])
+{
+    SHA1_CTX context;
+    SHA1Init(&context);
+    SHA1Update(&context, data, length);
+    SHA1Final(digest, &context);
+}
+
+static void fixDex(const char *dexPath)
 {
     int fd = open(dexPath, O_RDWR);
     struct stat st = {0};
     fstat(fd,&st);
     unsigned len = st.st_size;
-    const u1 *addr = (const u1*)mmap(NULL,len,PROT_READ|PROT_WRITE,MAP_PRIVATE,fd,0);
+    const u1 *addr = (const u1*)mmap(NULL,len,PROT_READ|PROT_WRITE,MAP_SHARED,fd,0);
+    MYLOG("fixDex mmap base %p, len=%u", addr, len);
     DexFile *dex = dexFileParse(addr, len, kDexParseContinueOnError);
+    ((DexHeader*)(dex->pHeader))->fileSize = len;
+
+    const u1 *dataPtrDex = addr;
+    int lengthNoOpt = len;
     if (dex->pOptHeader)
     {
+        u4 oCheckSum = dex->pOptHeader->checksum;
         u4 optChecksum = dexComputeOptChecksum(dex->pOptHeader);
-        MYLOG("regen dex opt checksum = %0x08x", optChecksum);
+        MYLOG("regen dex old checksum =0x%08x, new opt checksum = 0x%08x", oCheckSum, optChecksum);
         ((DexOptHeader*)(dex->pOptHeader))->checksum = optChecksum;
+        dataPtrDex += dex->pOptHeader->dexOffset;
+        lengthNoOpt -= dex->pOptHeader->dexOffset;
     }
     if (dex->pHeader)
     {
+        //fix dex checksum
+        u4 oCheckSum = dex->pHeader->checksum;
         u4 checksum = dexComputeChecksum(dex->pHeader);
-        MYLOG("regen dex checksum = %0x08x", checksum);
+        MYLOG("regen dex oldChecksum = 0x%08x, checksum = 0x%08x, checksum ptr %p", oCheckSum, checksum, &(dex->pHeader->checksum));
         ((DexHeader*)(dex->pHeader))->checksum = checksum;
+
+        //fix signature
+        unsigned char sha1Digest[kSHA1DigestLen];
+        const int nonSum = sizeof(dex->pHeader->magic) + sizeof(dex->pHeader->checksum) +
+                            kSHA1DigestLen;
+        
+        dexComputeSHA1Digest(dataPtrDex + nonSum, lengthNoOpt - nonSum, sha1Digest);
+
+        memcpy(((DexHeader*)(dex->pHeader))->signature, sha1Digest, kSHA1DigestLen);
     }
-    dexFileFree(dex);
+
+    msync((void*)addr, len, MS_SYNC);
     munmap((void*)addr, len);
     close(fd);
+    dexFileFree(dex);
 }
 
 static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, size_t numMethods, DexFile *pDexFile, int dataStart, int dataEnd, FILE *fpExtra, uint32_t &total_pointer)
@@ -630,7 +661,7 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
     fclose(fpDex);
     MYLOG("here write dex %s return %d writed", dexPath, sz);
 
-    fixDexCheckSum(dexPath);
+    fixDex(dexPath);
 
     MYLOG("dex %s checksum has fix", dexPath);
 }
