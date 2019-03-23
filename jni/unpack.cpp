@@ -11,6 +11,7 @@
 
 #include <set>
 #include <cstdio>
+#include <ctype.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -19,6 +20,20 @@
 pthread_mutex_t sMutex;
 bool sUseDexDump = false;
 char sPkgName[256] = "";
+
+static const char *trimCpy(char *dest, const char *src) {
+    char *q = dest;
+    const char *p = src;
+    while(*p) {
+        if (!isspace(*p)) {
+            *q++ = *p++;
+        }
+        else {
+            p++;
+        }
+    }
+    return dest;
+}
 
 __attribute__((constructor)) static void init(){
     pthread_mutex_init(&sMutex, 0);
@@ -35,14 +50,14 @@ __attribute__((constructor)) static void init(){
             *p = 0;
             const char *key = buf;
             const char *val = p + 1;
+            __android_log_print(ANDROID_LOG_INFO, TAG, "key=%s, val=%s", key, val);
             if (strcmp(key, "useDexDump") == 0) {
-                __android_log_print(ANDROID_LOG_INFO, TAG, "use dex dump");
                 sUseDexDump = (*val) != '0';
+                __android_log_print(ANDROID_LOG_INFO, TAG, "use dex %d", sUseDexDump);
             }
             if (strcmp(key, "pkgName") == 0) {
-
+                trimCpy(sPkgName, val);
                 __android_log_print(ANDROID_LOG_INFO, TAG, "pkgName = %s", sPkgName);
-                strcpy(sPkgName, val);
             }
         }
     }
@@ -119,11 +134,11 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
     fclose(f);
     //__android_log_print(ANDROID_LOG_INFO, TAG, "cmdline %s", buf);
     if (strstr(buf, pkgName)==0) {
-        //__android_log_print(ANDROID_LOG_INFO, TAG, "%s not the target pkgName", buf);
+        //__android_log_print(ANDROID_LOG_INFO, TAG, "%s not the target pkgName", pkgName);
         return;
     }
     
-    //__android_log_print(ANDROID_LOG_INFO, TAG, "find target pkgName %s, pid=%u", pkgName, getpid());
+    __android_log_print(ANDROID_LOG_INFO, TAG, "find target pkgName %s, pid=%u", pkgName, getpid());
     const MemMapping &memMap = pDvmDex->memMap; 
     pthread_mutex_lock(&sMutex);
     set<void*>::iterator it = s_addrHasDump.find(memMap.addr);
