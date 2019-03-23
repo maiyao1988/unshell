@@ -16,6 +16,39 @@
 #include <sys/types.h>
 #define TAG "unshell"
 
+pthread_mutex_t sMutex;
+bool sUseDexDump = false;
+char sPkgName[256] = "";
+
+__attribute__((constructor)) static void init(){
+    pthread_mutex_init(&sMutex, 0);
+    const char *cfgPath = "/data/local/tmp/cfg.txt";
+    FILE *f = fopen(cfgPath, "rb");
+    if (!f) {
+        __android_log_print(ANDROID_LOG_INFO, TAG, "cfg not found skip");
+        return;
+    }
+    char buf[500];
+    while (fgets(buf, sizeof(buf), f) != NULL) {
+        char *p = strchr(buf, '=');
+        if (p) {
+            *p = 0;
+            const char *key = buf;
+            const char *val = p + 1;
+            if (strcmp(key, "useDexDump") == 0) {
+                __android_log_print(ANDROID_LOG_INFO, TAG, "use dex dump");
+                sUseDexDump = (*val) != '0';
+            }
+            if (strcmp(key, "pkgName") == 0) {
+
+                __android_log_print(ANDROID_LOG_INFO, TAG, "pkgName = %s", sPkgName);
+                strcpy(sPkgName, val);
+            }
+        }
+    }
+    fclose(f);
+}
+
 
 typedef bool (*dvmCreateInternalThreadFun)(pthread_t *, const char *, void *(*)(void *), void *);
 /*
@@ -73,8 +106,12 @@ static void createDumpThread(const char *dumpDir, const char *dexName, DvmDex *p
 using namespace std;
 static set<void*> s_addrHasDump; 
 extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Object *loader) {
+    if (!sUseDexDump) {
+        return;
+    }
+    
     //const char *pkgName = "cn.missfresh.application";
-    const char *pkgName = "com.pmp.ppmoney";
+    const char *pkgName = sPkgName;
     const char *path = "/proc/self/cmdline";
     char buf[300] = {0};
     FILE *f = fopen(path, "rb");
@@ -88,17 +125,19 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
     
     //__android_log_print(ANDROID_LOG_INFO, TAG, "find target pkgName %s, pid=%u", pkgName, getpid());
     const MemMapping &memMap = pDvmDex->memMap; 
+    pthread_mutex_lock(&sMutex);
     set<void*>::iterator it = s_addrHasDump.find(memMap.addr);
     if (it != s_addrHasDump.end()) {
         //__android_log_print(ANDROID_LOG_INFO, TAG, "%p has dumped", memMap.addr);
+        pthread_mutex_unlock(&sMutex);
         return;
     }
     s_addrHasDump.insert(memMap.addr);
-
+    pthread_mutex_unlock(&sMutex);
     //begin dump
 
     char outputDir[255] = {0};
-    sprintf(outputDir, "/data/local/tmp/tmp_%d", getpid());
+    sprintf(outputDir, "/data/local/tmp/dexes_%d", getpid());
     mkdir(outputDir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
     char dexName[256] = {0};
