@@ -480,7 +480,6 @@ const DexClassDef* dexFindClass(const DexFile* pDexFile,
 u4 dexComputeChecksum(const DexHeader* pHeader)
 {
     const u1* start = (const u1*) pHeader;
-
     uLong adler = adler32(0L, Z_NULL, 0);
     const int nonSum = sizeof(pHeader->magic) + sizeof(pHeader->checksum);
 
