@@ -20,6 +20,7 @@
 pthread_mutex_t sMutex;
 bool sUseDexDump = false;
 char sPkgName[256] = "";
+static const char * const hackDir = "/data/local/tmp/hack";
 
 static const char *trimCpy(char *dest, const char *src) {
     char *q = dest;
@@ -37,7 +38,8 @@ static const char *trimCpy(char *dest, const char *src) {
 
 __attribute__((constructor)) static void init(){
     pthread_mutex_init(&sMutex, 0);
-    const char *cfgPath = "/data/local/tmp/hack/cfg.txt";
+    char cfgPath[255];
+    sprintf(cfgPath, "%s/cfg.txt", hackDir);
     FILE *f = fopen(cfgPath, "rb");
     if (!f) {
         __android_log_print(ANDROID_LOG_INFO, TAG, "cfg %s not found skip", cfgPath);
@@ -45,6 +47,10 @@ __attribute__((constructor)) static void init(){
     }
     char buf[500];
     while (fgets(buf, sizeof(buf), f) != NULL) {
+        if (buf[0] == '#')
+        {
+            continue;
+        }
         char *p = strchr(buf, '=');
         if (p) {
             *p = 0;
@@ -98,6 +104,8 @@ static void *dumpThread(void *param) {
     __android_log_print(ANDROID_LOG_INFO, TAG, "in dumpThread %s %s %p %p", p->dumpDir, p->dexName, p->pDvmDex, p->loader);
 
     dumpClass(p->dumpDir, p->dexName, p->pDvmDex, p->loader);
+
+    __android_log_print(ANDROID_LOG_INFO, TAG, "finish dump %s/%s", p->dumpDir, p->dexName);
     return 0;
 }
 
@@ -133,12 +141,12 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
     fread(buf, 1, sizeof(buf), f);
     fclose(f);
     //__android_log_print(ANDROID_LOG_INFO, TAG, "cmdline %s", buf);
-    if (strstr(buf, pkgName)==0) {
+    if (pkgName[0] == 0 || strstr(buf, pkgName)==0) {
         //__android_log_print(ANDROID_LOG_INFO, TAG, "%s not the target pkgName", pkgName);
         return;
     }
     
-    __android_log_print(ANDROID_LOG_INFO, TAG, "find target pkgName %s, pid=%u", pkgName, getpid());
+    //__android_log_print(ANDROID_LOG_INFO, TAG, "find target pkgName %s, pid=%u", pkgName, getpid());
     const MemMapping &memMap = pDvmDex->memMap; 
     pthread_mutex_lock(&sMutex);
     set<void*>::iterator it = s_addrHasDump.find(memMap.addr);
@@ -151,10 +159,10 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
     pthread_mutex_unlock(&sMutex);
     //begin dump
 
-    umask(0111);
+    umask(0);
     char outputDir[255] = {0};
-    sprintf(outputDir, "/data/local/tmp/hack/dexes_%s_%d", pkgName, getpid());
-    mkdir(outputDir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    sprintf(outputDir, "%s/%s_dexes_%d", hackDir, pkgName, getpid());
+    mkdir(outputDir, 0777);
 
     char dexName[256] = {0};
     sprintf(dexName, "classes_%u.dex", s_addrHasDump.size());

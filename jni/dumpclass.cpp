@@ -319,6 +319,11 @@ static void writeExceptClassDef(const char *outDir, DvmDex *pDvmDex) {
     char temp[255] = {0};
     sprintf(temp, "%s/part1", outDir);
     FILE *fpDef = fopen(temp, "wb");
+    if (!fpDef) 
+    {
+        MYLOG("fopen %s failed abort", temp);
+        abort();
+    }
     const u1 *mapBase = (const u1*)mem->addr;
     const u1 *classDefBase = pDexFile->baseAddr+pDexFile->pHeader->classDefsOff;
     MYLOG("%p %p %d %d", pDexFile, pDexFile->baseAddr, pDexFile->pHeader->classDefsOff, mem->length);
@@ -506,7 +511,7 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
     char tmpDir[255] = {0};
     sprintf(tmpDir, "%s/%s-tmp", dumpDir, dexName);
 
-    mkdir(tmpDir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    mkdir(tmpDir, 0777);
 
     writeExceptClassDef(tmpDir, pDvmDex);
 
