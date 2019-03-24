@@ -22,10 +22,10 @@ char sPkgName[256] = "";
 
 __attribute__((constructor)) static void init(){
     pthread_mutex_init(&sMutex, 0);
-    const char *cfgPath = "/data/local/tmp/cfg.txt";
+    const char *cfgPath = "/data/local/tmp/hack/cfg.txt";
     FILE *f = fopen(cfgPath, "rb");
     if (!f) {
-        __android_log_print(ANDROID_LOG_INFO, TAG, "cfg not found skip");
+        __android_log_print(ANDROID_LOG_INFO, TAG, "cfg %s not found skip", cfgPath);
         return;
     }
     char buf[500];
@@ -136,12 +136,13 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
     pthread_mutex_unlock(&sMutex);
     //begin dump
 
+    umask(0111);
     char outputDir[255] = {0};
-    sprintf(outputDir, "/data/local/tmp/dexes_%d", getpid());
+    sprintf(outputDir, "/data/local/tmp/hack/dexes_%s_%d", pkgName, getpid());
     mkdir(outputDir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
     char dexName[256] = {0};
-    sprintf(dexName, "%s_%u.dex", pkgName, s_addrHasDump.size());
+    sprintf(dexName, "classes_%u.dex", s_addrHasDump.size());
     createDumpThread(outputDir, dexName, pDvmDex, loader);
 
 /*
