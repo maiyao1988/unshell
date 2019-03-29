@@ -112,7 +112,7 @@ static void *dumpThread(void *param) {
 static void createDumpThread(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object *loader) {
     dvmCreateInternalThreadFun dvmCreateInternalThread = (dvmCreateInternalThreadFun)dlsym(dvmH, "_Z23dvmCreateInternalThreadPlPKcPFPvS2_ES2_");
     
-    __android_log_print(ANDROID_LOG_INFO, TAG, "dvmCreateInternalThread %p", dvmCreateInternalThread);
+    //__android_log_print(ANDROID_LOG_INFO, TAG, "dvmCreateInternalThread %p", dvmCreateInternalThread);
     
     //memory leak but just for dump is ok here
     Arg *param = (Arg*)malloc(sizeof(Arg));
@@ -121,8 +121,11 @@ static void createDumpThread(const char *dumpDir, const char *dexName, DvmDex *p
     strcpy(param->dumpDir, dumpDir);
     strcpy(param->dexName, dexName);
 
-    pthread_t dumpthread;
-    dvmCreateInternalThread(&dumpthread, "ClassDumper", dumpThread, (void*)param);                             
+    //dumpThread(param);
+    pthread_t t;
+
+    dvmCreateInternalThread(&t, "ClassDumper", dumpThread, (void*)param);
+    //__android_log_print(ANDROID_LOG_INFO, TAG, "pthread_create return %d", r);          
 
 }
 
@@ -159,6 +162,7 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
     pthread_mutex_unlock(&sMutex);
     //begin dump
 
+    __android_log_print(ANDROID_LOG_INFO, TAG, "begin dump pkgName %s, base=%p, pid=%u", pkgName, memMap.addr, getpid());
     umask(0);
     char outputDir[255] = {0};
     sprintf(outputDir, "%s/%s_dexes_%d", hackDir, pkgName, getpid());

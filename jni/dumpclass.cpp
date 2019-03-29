@@ -454,7 +454,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
             {
                 if (methodsToFix[i].codeOff)
                 {
-                    //真实函数是native，但是待修复函数却有codeoff，休要修复
+                    //真实函数是native，但是待修复函数却有codeoff，要修复
                     need_extra = true;
                     methodsToFix[i].accessFlags = realAc;
                     methodsToFix[i].codeOff = 0;
@@ -466,7 +466,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
 
             if (realAc != methodsToFix[i].accessFlags)
             {
-                //真实函数与待修复函数accessFlags不一致的，休要修复
+                //真实函数与待修复函数accessFlags不一致的，要修复
                 MYLOG("[%s] accessFlag not equal, expected:0x%08x, actual:0x%08x", desp, methodsToFix[i].accessFlags, realAc);
                 need_extra = true;
                 methodsToFix[i].accessFlags = realAc;
@@ -583,28 +583,31 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
 
             if (clazz)
             {
+                /*
                 //MYLOG("GOT IT class: %s", descriptor);
                 if (!dvmIsClassInitialized(clazz))
                 {
-                    /*
+                    
                     if (dvmInitClass(clazz))
                     {
                         MYLOG("GOT IT init: %s", descriptor);
                     }
-                    */
                 }
-
+                */
+                bool shouldFixClassDef = false;
                 if (pClassDef->classDataOff < dataStart || pClassDef->classDataOff > dataEnd)
                 {
                     MYLOG("[%s] classdata out of range, classDataoff:0x%08x, dataStart:0x%08x, dataEnd:0x%08x", descriptor, pClassDef->classDataOff, dataStart, dataEnd);
-                    need_extra = true;
+                    shouldFixClassDef = true;
                 }
-
+                bool hasFixDirect = false;
+                bool hasFixVirtual = false;
                 if (pData)
                 {
-                    need_extra = need_extra || fixClassDataMethod(pData->directMethods, clazz->directMethods, pData->header.directMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
-                    need_extra = need_extra || fixClassDataMethod(pData->virtualMethods, clazz->virtualMethods, pData->header.virtualMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
+                    hasFixDirect = fixClassDataMethod(pData->directMethods, clazz->directMethods, pData->header.directMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
+                    hasFixVirtual = fixClassDataMethod(pData->virtualMethods, clazz->virtualMethods, pData->header.virtualMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
                 }
+                need_extra= shouldFixClassDef || hasFixDirect || hasFixVirtual;
             }
             else 
             {
