@@ -539,7 +539,7 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
 
     const char *header = "Landroid";
     unsigned int num_class_defs = pDexFile->pHeader->classDefsSize;
-    uint32_t total_pointer = mem->length - uint32_t(pDexFile->baseAddr - (const u1 *)mem->addr);
+    uint32_t total_pointer = mem->length;
     uint32_t rec = total_pointer;
 
     while (total_pointer & 3)
@@ -548,8 +548,8 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
     }
 
     int inc = total_pointer - rec;
-    uint32_t dataStart = pDexFile->pHeader->classDefsOff + sizeof(DexClassDef) * num_class_defs;
-    uint32_t dataEnd = (uint32_t)((const u1 *)mem->addr + mem->length - pDexFile->baseAddr);
+    uint32_t dataStart = pDexFile->pHeader->dataOff;
+    uint32_t dataEnd = (uint32_t)(pDexFile->pHeader->dataOff + pDexFile->pHeader->dataSize);
 
     void *self = dvmThreadSelf();
     
