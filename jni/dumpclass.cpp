@@ -462,7 +462,14 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
                 continue;
             }
 
-            u4 realCodeOff = u4((const u1 *)actualMethod->insns - 16 - pDexFile->baseAddr);
+            const u1 *memCodeStart = (const u1 *)actualMethod->insns - 16;
+            if (memCodeStart < pDexFile->baseAddr) 
+            {
+                MYLOG("[%s] bad memCodeStart=[%p] < pDexFile->baseAddr=[%p] codeoff=[%d] dataStart=[%d], dataEnd=[%d] skip"
+                    , desp, memCodeStart, pDexFile->baseAddr, methodsToFix[i].codeOff, dataStart, dataEnd);
+                continue;
+            }
+            u4 realCodeOff = u4(memCodeStart - pDexFile->baseAddr);
 
             if (realAc != methodsToFix[i].accessFlags)
             {
@@ -472,23 +479,26 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
                 methodsToFix[i].accessFlags = realAc;
             }
 
-            if (realCodeOff != methodsToFix[i].codeOff && ((realCodeOff >= dataStart && realCodeOff <= dataEnd) || realCodeOff == 0))
+            if (realCodeOff != methodsToFix[i].codeOff)
             {
-                //code off不一致，且codeoff在map范围内, 直接将真实codeoff复制过去即可
-                MYLOG("[%s] codeoff not equal to actual in map methodToFix_codeoff:0x%08x,real_codeoff:0x%08x,dataStart:0x%08x, dataEnd:0x%08x", 
-                    desp, methodsToFix[i].codeOff, realCodeOff, dataStart, dataEnd);
-                need_extra = true;
-                methodsToFix[i].codeOff = realCodeOff;
+                if (realCodeOff >= dataStart && realCodeOff <= dataEnd) 
+                {
+                    //code off不一致，且codeoff在map范围内, 直接将真实codeoff复制过去即可
+                    MYLOG("[%s] codeoff not equal to actual in map methodToFix_codeoff:0x%08x,real_codeoff:0x%08x,dataStart:0x%08x, dataEnd:0x%08x", 
+                        desp, methodsToFix[i].codeOff, realCodeOff, dataStart, dataEnd);
+                    need_extra = true;
+                    methodsToFix[i].codeOff = realCodeOff;
+                }
             }
 
             if ((realCodeOff < dataStart || realCodeOff > dataEnd) && realCodeOff != 0)
             {
                 //真实codeoff超出data范围的，需要修复
-                MYLOG("[%s] real_codeoff out of range real_codeoff:0x%08x,dataStart:0x%08x,dataEnd:0x%08x", 
-                    desp, realCodeOff, dataStart, dataEnd);
+                MYLOG("[%s] real_codeoff out of range oldCodeOff=0x%08x, real_codeoff:0x%08x,dataStart:0x%08x,dataEnd:0x%08x", 
+                    desp, methodsToFix[i].codeOff, realCodeOff, dataStart, dataEnd);
                 need_extra = true;
                 methodsToFix[i].codeOff = total_pointer;
-                DexCode *code = (DexCode *)((const u1 *)actualMethod->insns - 16);
+                DexCode *code = (DexCode *)memCodeStart;
                 uint8_t *item = (uint8_t *)code;
                 int code_item_len = 0;
                 if (code->triesSize)
@@ -580,20 +590,9 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
             //equal to self->exception=0;
             *(unsigned*)(ptr+68) = 0;
             //MYLOG("after set exception");
-
+            
             if (clazz)
             {
-                /*
-                //MYLOG("GOT IT class: %s", descriptor);
-                if (!dvmIsClassInitialized(clazz))
-                {
-                    
-                    if (dvmInitClass(clazz))
-                    {
-                        MYLOG("GOT IT init: %s", descriptor);
-                    }
-                }
-                */
                 bool shouldFixClassDef = false;
                 if (pClassDef->classDataOff < dataStart || pClassDef->classDataOff > dataEnd)
                 {
@@ -608,12 +607,14 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
                     hasFixVirtual = fixClassDataMethod(pData->virtualMethods, clazz->virtualMethods, pData->header.virtualMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
                 }
                 need_extra= shouldFixClassDef || hasFixDirect || hasFixVirtual;
+                if (need_extra)
+                    MYLOG("virtual_fix=%d, direct_fix=%d, class_fix=%d", hasFixVirtual, hasFixDirect, shouldFixClassDef);
             }
             else 
             {
                 MYLOG("defineclass: %s return null", descriptor);
             }
-
+            
         }
 
         if (need_extra && pData)
