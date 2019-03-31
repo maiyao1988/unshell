@@ -75,15 +75,16 @@ static void ReadClassDataMethod(const uint8_t **pData, DexMethod *pMethod)
     pMethod->codeOff = readUnsignedLeb128(pData);
 }
 
-static DexClassData *ReadClassData(const uint8_t **pData)
+static DexClassData *ReadClassData(const uint8_t *data)
 {
 
     DexClassDataHeader header;
 
-    if (*pData == NULL)
+    if (data == NULL)
     {
         return NULL;
     }
+    const uint8_t **pData = &data;
 
     ReadClassDataHeader(pData, &header);
 
@@ -193,10 +194,14 @@ static uint8_t *EncodeClassData(DexClassData *pData, int &len)
     len += unsignedLeb128Size(pData->header.directMethodsSize);
     len += unsignedLeb128Size(pData->header.virtualMethodsSize);
 
+
+    MYLOG("staticSz=%d, infSz=%d, dirSz=%d, virSz=%d", pData->header.staticFieldsSize, pData->header.instanceFieldsSize, pData->header.directMethodsSize, pData->header.virtualMethodsSize);
     if (pData->staticFields)
     {
         for (uint32_t i = 0; i < pData->header.staticFieldsSize; i++)
         {
+
+            MYLOG("fid=%d flag=%d", pData->staticFields[i].fieldIdx, pData->staticFields[i].accessFlags);
             len += unsignedLeb128Size(pData->staticFields[i].fieldIdx);
             len += unsignedLeb128Size(pData->staticFields[i].accessFlags);
         }
@@ -258,6 +263,7 @@ static uint8_t *EncodeClassData(DexClassData *pData, int &len)
     {
         for (uint32_t i = 0; i < pData->header.instanceFieldsSize; i++)
         {
+
             writeLeb128(&store, pData->instanceFields[i].fieldIdx);
             writeLeb128(&store, pData->instanceFields[i].accessFlags);
         }
@@ -401,6 +407,7 @@ static void fixDex(const char *dexPath)
         dataPtrDex += dex->pOptHeader->dexOffset;
 
         lengthNoOpt -= dex->pOptHeader->dexOffset;
+        //dex->pOptHeader->dexLength = lengthNoOpt;
 
     }
 
@@ -428,12 +435,12 @@ static void fixDex(const char *dexPath)
         
     }
 
+    dexFileFree(dex);
+
     msync((void*)addr, len, MS_SYNC);
     munmap((void*)addr, len);
 
     close(fd);
-
-    dexFileFree(dex);
 
 }
 
@@ -463,12 +470,6 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
             }
 
             const u1 *memCodeStart = (const u1 *)actualMethod->insns - 16;
-            if (memCodeStart < pDexFile->baseAddr) 
-            {
-                MYLOG("[%s] bad memCodeStart=[%p] < pDexFile->baseAddr=[%p] codeoff=[%d] dataStart=[%d], dataEnd=[%d] skip"
-                    , desp, memCodeStart, pDexFile->baseAddr, methodsToFix[i].codeOff, dataStart, dataEnd);
-                continue;
-            }
             u4 realCodeOff = u4(memCodeStart - pDexFile->baseAddr);
 
             if (realAc != methodsToFix[i].accessFlags)
@@ -515,12 +516,6 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
 
                 fwrite(item, 1, code_item_len, fpExtra);
                 total_pointer += code_item_len;
-                while (total_pointer & 3)
-                {
-                    //对齐
-                    fputc(0, fpExtra);
-                    total_pointer++;
-                }
                 fflush(fpExtra);
             }
         }
@@ -550,14 +545,7 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
     const char *header = "Landroid";
     unsigned int num_class_defs = pDexFile->pHeader->classDefsSize;
     uint32_t total_pointer = mem->length;
-    uint32_t rec = total_pointer;
 
-    while (total_pointer & 3)
-    {
-        total_pointer++;
-    }
-
-    int inc = total_pointer - rec;
     uint32_t dataStart = pDexFile->pHeader->dataOff;
     uint32_t dataEnd = (uint32_t)(pDexFile->pHeader->dataOff + pDexFile->pHeader->dataSize);
 
@@ -571,7 +559,7 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
         const char *descriptor = dexGetClassDescriptor(pDvmDex->pDexFile, pClassDef);
 
         const u1 *data = dexGetClassData(pDexFile, pClassDef);
-        DexClassData *pData = ReadClassData(&data);
+        DexClassData *pData = ReadClassData(data);
 
         if (strncmp(header, descriptor, 8) == 0|| !pClassDef->classDataOff)
         {
@@ -624,15 +612,13 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
             uint8_t *out = EncodeClassData(pData, class_data_len);
             if (out)
             {
+                MYLOG("fix classoff 0x%08x", total_pointer);
                 classdef.classDataOff = total_pointer;
+
+                MYLOG("write class_data to extra len=%d", class_data_len);
                 fwrite(out, 1, class_data_len, fpExtra);
                 fflush(fpExtra);
                 total_pointer += class_data_len;
-                while (total_pointer & 3)
-                {
-                    fputc(0, fpExtra);
-                    total_pointer++;
-                }
                 fflush(fpExtra);
                 free(out);
                 MYLOG("GOT IT classdata written");
@@ -666,11 +652,6 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
 
     appenFileTo(path, fpDex);
 
-    while (inc > 0)
-    {
-        fputc(0, fpExtra);
-        inc--;
-    }
     fflush(fpDex);
 
     sprintf(path, "%s/extra", tmpDir);
