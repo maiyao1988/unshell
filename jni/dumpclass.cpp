@@ -75,7 +75,7 @@ static void ReadClassDataMethod(const uint8_t **pData, DexMethod *pMethod)
     pMethod->codeOff = readUnsignedLeb128(pData);
 }
 
-static DexClassData *ReadClassData(const uint8_t *data)
+static DexClassData *ReadClassDataItem(const uint8_t *data)
 {
 
     DexClassDataHeader header;
@@ -185,7 +185,7 @@ static void writeLeb128(uint8_t **ptr, uint32_t data)
     }
 }
 
-static uint8_t *EncodeClassData(DexClassData *pData, int &len)
+static uint8_t *EncodeClassDataItem(DexClassData *pData, int &len)
 {
     len = 0;
 
@@ -392,8 +392,49 @@ static void fixDex(const char *dexPath)
     fstat(fd,&st);
     unsigned len = st.st_size;
     const u1 *addr = (const u1*)mmap(NULL,len,PROT_READ|PROT_WRITE,MAP_SHARED,fd,0);
-    MYLOG("fixDex mmap base %p, len=%u", addr, len);
+    MYLOG("fixDex mmap base %p, end=%p", addr, addr+len);
     DexFile *dex = dexFileParse(addr, len, kDexParseContinueOnError);
+
+    if (dex->pHeader) 
+    {
+        MYLOG("set debugInfoOff to 0");
+        unsigned int nClassDef = dex->pHeader->classDefsSize;
+
+        for (int i = 0; i < nClassDef; i++) 
+        {
+            const DexClassDef *pClassDef = dexGetClassDef(dex, i);
+
+            const char *descriptor = dexGetClassDescriptor(dex, pClassDef);
+
+            const u1 *data = dexGetClassData(dex, pClassDef);
+            if (!data)
+            {
+                continue;
+            }
+
+            DexClassData *clsData = ReadClassDataItem(data);
+
+            for (int j = 0; j < clsData->header.directMethodsSize; j++)
+            {
+                DexCode *code = (DexCode*)dexGetCode(dex, &clsData->directMethods[j]);
+                if (code) 
+                {
+                    code->debugInfoOff = 0;
+                }
+            }
+            for (int j = 0; j < clsData->header.virtualMethodsSize; j++)
+            {
+                DexCode *code = (DexCode*)dexGetCode(dex, &clsData->virtualMethods[j]);
+
+                if (code) 
+                {
+                    code->debugInfoOff = 0;
+                }
+            }
+            free(clsData);
+        }
+    }
+    
 
     const u1 *dataPtrDex = addr;
     int lengthNoOpt = len;
@@ -407,7 +448,7 @@ static void fixDex(const char *dexPath)
         dataPtrDex += dex->pOptHeader->dexOffset;
 
         lengthNoOpt -= dex->pOptHeader->dexOffset;
-        //dex->pOptHeader->dexLength = lengthNoOpt;
+        ((DexOptHeader*)(dex->pOptHeader))->dexLength = lengthNoOpt;
 
     }
 
@@ -446,6 +487,7 @@ static void fixDex(const char *dexPath)
 
 static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, size_t numMethods, DexFile *pDexFile, int dataStart, int dataEnd, FILE *fpExtra, uint32_t &total_pointer)
 {
+    //修复的桥梁是找到内存的DexCode结构，修复Dex里面的DexCode结构
     const uint32_t mask = 0x3ffff;
     bool need_extra = false;
     char desp[255]={0};
@@ -468,9 +510,9 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
                 }
                 continue;
             }
-
-            const u1 *memCodeStart = (const u1 *)actualMethod->insns - 16;
-            u4 realCodeOff = u4(memCodeStart - pDexFile->baseAddr);
+            //insn结构在DexCode结构的第16个字节，所以取得DexCode的头要减去16
+            const u1 *memDexCodeStart = (const u1 *)actualMethod->insns - 16;
+            u4 realCodeOff = u4(memDexCodeStart - pDexFile->baseAddr);
 
             if (realAc != methodsToFix[i].accessFlags)
             {
@@ -499,7 +541,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
                     desp, methodsToFix[i].codeOff, realCodeOff, dataStart, dataEnd);
                 need_extra = true;
                 methodsToFix[i].codeOff = total_pointer;
-                DexCode *code = (DexCode *)memCodeStart;
+                DexCode *code = (DexCode *)memDexCodeStart;
                 uint8_t *item = (uint8_t *)code;
                 int code_item_len = 0;
                 if (code->triesSize)
@@ -518,6 +560,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
                 total_pointer += code_item_len;
                 fflush(fpExtra);
             }
+
         }
     }
     return need_extra;
@@ -553,13 +596,13 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
     
     for (size_t i = 0; i < num_class_defs; i++)
     {
-        bool need_extra = false;
+        bool updateClassData = false;
         const DexClassDef *pClassDef = dexGetClassDef(pDvmDex->pDexFile, i);
         DexClassDef classdef = *pClassDef;
         const char *descriptor = dexGetClassDescriptor(pDvmDex->pDexFile, pClassDef);
 
         const u1 *data = dexGetClassData(pDexFile, pClassDef);
-        DexClassData *pData = ReadClassData(data);
+        DexClassData *pData = ReadClassDataItem(data);
 
         if (strncmp(header, descriptor, 8) == 0|| !pClassDef->classDataOff)
         {
@@ -594,8 +637,8 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
                     hasFixDirect = fixClassDataMethod(pData->directMethods, clazz->directMethods, pData->header.directMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
                     hasFixVirtual = fixClassDataMethod(pData->virtualMethods, clazz->virtualMethods, pData->header.virtualMethodsSize, pDexFile, dataStart, dataEnd, fpExtra, total_pointer);
                 }
-                need_extra= shouldFixClassDef || hasFixDirect || hasFixVirtual;
-                if (need_extra)
+                updateClassData= shouldFixClassDef || hasFixDirect || hasFixVirtual;
+                if (updateClassData)
                     MYLOG("virtual_fix=%d, direct_fix=%d, class_fix=%d", hasFixVirtual, hasFixDirect, shouldFixClassDef);
             }
             else 
@@ -605,11 +648,11 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
             
         }
 
-        if (need_extra && pData)
+        if (updateClassData && pData)
         {
             MYLOG("[%s] update classData", descriptor);
             int class_data_len = 0;
-            uint8_t *out = EncodeClassData(pData, class_data_len);
+            uint8_t *out = EncodeClassDataItem(pData, class_data_len);
             if (out)
             {
                 MYLOG("fix classoff 0x%08x", total_pointer);
@@ -621,13 +664,12 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
                 total_pointer += class_data_len;
                 fflush(fpExtra);
                 free(out);
-                MYLOG("GOT IT classdata written");
+                MYLOG("[%s] classData has written to extra", descriptor);
             }
         }
         free(pData);
 
         fwrite(&classdef, sizeof(classdef), 1, fpDef);
-        //MYLOG("after write def");
         fflush(fpDef);
     }
 
