@@ -21,7 +21,7 @@
 #include <fcntl.h>
 
 #define MYLOG(...) \
-    __android_log_print(ANDROID_LOG_INFO, "unshell", __VA_ARGS__);
+    __android_log_print(ANDROID_LOG_FATAL, "unshell", __VA_ARGS__);
 /*
 
 ; dvmIsClassInitialized(ClassObject const*)

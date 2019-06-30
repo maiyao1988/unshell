@@ -42,7 +42,7 @@ __attribute__((constructor)) static void init(){
     sprintf(cfgPath, "%s/cfg.txt", hackDir);
     FILE *f = fopen(cfgPath, "rb");
     if (!f) {
-        __android_log_print(ANDROID_LOG_INFO, TAG, "cfg %s not found skip", cfgPath);
+        __android_log_print(ANDROID_LOG_FATAL, TAG, "cfg %s not found skip", cfgPath);
         return;
     }
     char buf[500];
@@ -56,14 +56,14 @@ __attribute__((constructor)) static void init(){
             *p = 0;
             const char *key = buf;
             const char *val = p + 1;
-            __android_log_print(ANDROID_LOG_INFO, TAG, "key=%s, val=%s", key, val);
+            __android_log_print(ANDROID_LOG_FATAL, TAG, "key=%s, val=%s", key, val);
             if (strcmp(key, "useDexDump") == 0) {
                 sUseDexDump = (*val) != '0';
-                __android_log_print(ANDROID_LOG_INFO, TAG, "use dex %d", sUseDexDump);
+                __android_log_print(ANDROID_LOG_FATAL, TAG, "use dex %d", sUseDexDump);
             }
             if (strcmp(key, "pkgName") == 0) {
                 trimCpy(sPkgName, val);
-                __android_log_print(ANDROID_LOG_INFO, TAG, "pkgName = %s", sPkgName);
+                __android_log_print(ANDROID_LOG_FATAL, TAG, "pkgName = %s", sPkgName);
             }
         }
     }
@@ -98,21 +98,21 @@ void *dvmH = dlopen("libdvm.so", RTLD_NOW);
 
 void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Object *loader);
 
+
 static void *dumpThread(void *param) {
+
     Arg *p = (Arg*)param;
 
-    __android_log_print(ANDROID_LOG_INFO, TAG, "in dumpThread %s %s %p %p", p->dumpDir, p->dexName, p->pDvmDex, p->loader);
+    __android_log_print(ANDROID_LOG_FATAL, TAG, "in dumpThread %s %s %p %p", p->dumpDir, p->dexName, p->pDvmDex, p->loader);
 
     dumpClass(p->dumpDir, p->dexName, p->pDvmDex, p->loader);
 
-    __android_log_print(ANDROID_LOG_INFO, TAG, "finish dump %s/%s", p->dumpDir, p->dexName);
+    __android_log_print(ANDROID_LOG_FATAL, TAG, "finish dump %s/%s", p->dumpDir, p->dexName);
     return 0;
 }
 
 static void createDumpThread(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object *loader) {
-    dvmCreateInternalThreadFun dvmCreateInternalThread = (dvmCreateInternalThreadFun)dlsym(dvmH, "_Z23dvmCreateInternalThreadPlPKcPFPvS2_ES2_");
-    
-    //__android_log_print(ANDROID_LOG_INFO, TAG, "dvmCreateInternalThread %p", dvmCreateInternalThread);
+    //__android_log_print(ANDROID_LOG_FATAL, TAG, "dvmCreateInternalThread %p", dvmCreateInternalThread);
     
     //memory leak but just for dump is ok here
     Arg *param = (Arg*)malloc(sizeof(Arg));
@@ -123,10 +123,9 @@ static void createDumpThread(const char *dumpDir, const char *dexName, DvmDex *p
 
     //dumpThread(param);
     pthread_t t;
-
+    dvmCreateInternalThreadFun dvmCreateInternalThread = (dvmCreateInternalThreadFun)dlsym(dvmH, "_Z23dvmCreateInternalThreadPlPKcPFPvS2_ES2_");
     dvmCreateInternalThread(&t, "ClassDumper", dumpThread, (void*)param);
-    //__android_log_print(ANDROID_LOG_INFO, TAG, "pthread_create return %d", r);          
-
+    //__android_log_print(ANDROID_LOG_FATAL, TAG, "pthread_create return %d", r);          
 }
 
 using namespace std;
@@ -143,18 +142,18 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
     FILE *f = fopen(path, "rb");
     fread(buf, 1, sizeof(buf), f);
     fclose(f);
-    //__android_log_print(ANDROID_LOG_INFO, TAG, "cmdline %s", buf);
+    //__android_log_print(ANDROID_LOG_FATAL, TAG, "cmdline %s", buf);
     if (pkgName[0] == 0 || strstr(buf, pkgName)==0) {
-        //__android_log_print(ANDROID_LOG_INFO, TAG, "%s not the target pkgName", pkgName);
+        //__android_log_print(ANDROID_LOG_FATAL, TAG, "%s not the target pkgName", pkgName);
         return;
     }
     
-    //__android_log_print(ANDROID_LOG_INFO, TAG, "find target pkgName %s, pid=%u", pkgName, getpid());
+    //__android_log_print(ANDROID_LOG_FATAL, TAG, "find target pkgName %s, pid=%u", pkgName, getpid());
     const MemMapping &memMap = pDvmDex->memMap; 
     pthread_mutex_lock(&sMutex);
     set<void*>::iterator it = s_addrHasDump.find(memMap.addr);
     if (it != s_addrHasDump.end()) {
-        //__android_log_print(ANDROID_LOG_INFO, TAG, "%p has dumped", memMap.addr);
+        //__android_log_print(ANDROID_LOG_FATAL, TAG, "%p has dumped", memMap.addr);
         pthread_mutex_unlock(&sMutex);
         return;
     }
@@ -162,7 +161,6 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
     pthread_mutex_unlock(&sMutex);
     //begin dump
 
-    __android_log_print(ANDROID_LOG_INFO, TAG, "begin dump pkgName %s, base=%p, pid=%u", pkgName, memMap.addr, getpid());
     umask(0);
     char outputDir[255] = {0};
     sprintf(outputDir, "%s/%s_dexes_%d", hackDir, pkgName, getpid());
@@ -170,18 +168,34 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
 
     char dexName[256] = {0};
     sprintf(dexName, "classes_%u.dex", s_addrHasDump.size());
-    createDumpThread(outputDir, dexName, pDvmDex, loader);
+
+    __android_log_print(ANDROID_LOG_FATAL, TAG, "begin dump pkgName %s, base=%p, pid=%u,dexName=%s", pkgName, memMap.addr, getpid(), dexName);
+    
+    char ijiamiLIb[255] = {0};
+    sprintf(ijiamiLIb, "/data/data/%s/files/libexec.so", pkgName);
+    FILE *fijiami = fopen(ijiamiLIb, "r");
+    if (fijiami) {
+        __android_log_print(ANDROID_LOG_FATAL, TAG, "find ijiami libexec.so, use direct dump");
+        //爱加密的方案无法hook了dvmCreateInternalThread,无法调用该函数，一调用就崩溃，所以只能直接主线程dump
+        //另外爱加密hook了__android_log_buf_write,只能打出ERROR以上的日志，所以为了简单调试，全部日志使用Fatal
+        fclose(fijiami);
+        dumpClass(outputDir, dexName, pDvmDex, loader);
+    }
+    else {
+        __android_log_print(ANDROID_LOG_FATAL, TAG, "use internal thread dump");
+        createDumpThread(outputDir, dexName, pDvmDex, loader);
+    }
 
 /*
-    __android_log_print(ANDROID_LOG_INFO, TAG, "dumping to %s", outputPath);
-    __android_log_print(ANDROID_LOG_INFO, TAG, "hello %s addr %p len %d baseAddr %p baseLen %d", fileName, memMap.addr, memMap.length, memMap.baseAddr, memMap.baseLength);
+    __android_log_print(ANDROID_LOG_FATAL, TAG, "dumping to %s", outputPath);
+    __android_log_print(ANDROID_LOG_FATAL, TAG, "hello %s addr %p len %d baseAddr %p baseLen %d", fileName, memMap.addr, memMap.length, memMap.baseAddr, memMap.baseLength);
     FILE *fdex = fopen(outputPath, "w");
     if (!fdex) {
-        __android_log_print(ANDROID_LOG_INFO, TAG, "can not open %s", outputPath);
+        __android_log_print(ANDROID_LOG_FATAL, TAG, "can not open %s", outputPath);
         return;
     }
     fwrite(memMap.addr, 1, memMap.length, fdex);
-    __android_log_print(ANDROID_LOG_INFO, TAG, "file has writed ok");
+    __android_log_print(ANDROID_LOG_FATAL, TAG, "file has writed ok");
     fclose(fdex);
     */
 
