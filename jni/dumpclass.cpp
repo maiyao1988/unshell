@@ -496,9 +496,14 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
         for (uint32_t i = 0; i < numMethods; i++)
         {
             Method *actualMethod = &(actualMethods[i]);
+            if (!actualMethod->clazz) {
+                MYLOG("method class is null skip");
+                return need_extra;
+            }
+            //MYLOG("niter %d actual n=%p, num=%d", i, actualMethod->clazz, numMethods);
             uint32_t realAc = (actualMethod->accessFlags) & mask;
-
             sprintf(desp, "%s->%s", actualMethod->clazz->descriptor, actualMethod->name);
+
             if (!actualMethod->insns || realAc & ACC_NATIVE)
             {
                 if (methodsToFix[i].codeOff)
@@ -510,6 +515,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
                 }
                 continue;
             }
+
             //insn结构在DexCode结构的第16个字节，所以取得DexCode的头要减去16
             const u1 *memDexCodeStart = (const u1 *)actualMethod->insns - 16;
             u4 realCodeOff = u4(memDexCodeStart - pDexFile->baseAddr);
@@ -544,6 +550,7 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
                 DexCode *code = (DexCode *)memDexCodeStart;
                 uint8_t *item = (uint8_t *)code;
                 int code_item_len = 0;
+
                 if (code->triesSize)
                 {
                     const u1 *handler_data = dexGetCatchHandlerData(code);
@@ -555,7 +562,6 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
                 {
                     code_item_len = 16 + code->insnsSize * 2;
                 }
-
                 fwrite(item, 1, code_item_len, fpExtra);
                 total_pointer += code_item_len;
                 fflush(fpExtra);
@@ -566,8 +572,14 @@ static bool fixClassDataMethod(DexMethod *methodsToFix, Method *actualMethods, s
     return need_extra;
 }
 
+static pthread_mutex_t _sMutex;
+
+__attribute__((constructor)) static void init(){
+    pthread_mutex_init(&_sMutex, 0);
+}
 void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object *loader)
 {
+
     char tmpDir[255] = {0};
     sprintf(tmpDir, "%s/%s-tmp", dumpDir, dexName);
 
@@ -707,5 +719,4 @@ void dumpClass(const char *dumpDir, const char *dexName, DvmDex *pDvmDex, Object
     fixDex(dexPath);
 
     MYLOG("dex %s checksum has fix", dexPath);
-    
 }

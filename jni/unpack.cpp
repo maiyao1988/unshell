@@ -18,9 +18,10 @@
 #define TAG "unshell"
 
 pthread_mutex_t sMutex;
-bool sUseDexDump = false;
-char sPkgName[256] = "";
-static const char * const hackDir = "/data/local/tmp/hack";
+static int smethodlogUid = -1;
+static bool sUseDexDump = 0;
+static char sPkgName[256] = "";
+static const char *hackDir = "/data/local/tmp/hack";
 
 static const char *trimCpy(char *dest, const char *src) {
     char *q = dest;
@@ -36,8 +37,13 @@ static const char *trimCpy(char *dest, const char *src) {
     return dest;
 }
 
+
+static DexStringCache scache;
+
 __attribute__((constructor)) static void init(){
     pthread_mutex_init(&sMutex, 0);
+
+    dexStringCacheInit(&scache);
     char cfgPath[255];
     sprintf(cfgPath, "%s/cfg.txt", hackDir);
     FILE *f = fopen(cfgPath, "rb");
@@ -61,6 +67,12 @@ __attribute__((constructor)) static void init(){
                 sUseDexDump = (*val) != '0';
                 __android_log_print(ANDROID_LOG_FATAL, TAG, "use dex %d", sUseDexDump);
             }
+            if (strcmp(key, "methodLogUid") == 0) {
+                char suid[300];
+                trimCpy(suid, val);
+                smethodlogUid = atoi(suid);
+                __android_log_print(ANDROID_LOG_FATAL, TAG, "use method logs uid:%d", smethodlogUid);
+            }
             if (strcmp(key, "pkgName") == 0) {
                 trimCpy(sPkgName, val);
                 __android_log_print(ANDROID_LOG_FATAL, TAG, "pkgName = %s", sPkgName);
@@ -70,6 +82,14 @@ __attribute__((constructor)) static void init(){
     fclose(f);
 }
 
+extern "C" void invokeMethodCb(const Method* methodToCall) {
+    static bool isSkip = false;
+    int uid = getuid();
+    if (smethodlogUid == uid) {
+        const char *desc = dexProtoGetMethodDescriptor(&methodToCall->prototype, &scache);
+        __android_log_print(ANDROID_LOG_ERROR, "method-dumps", "%s%s", methodToCall->clazz->descriptor, desc);
+    }
+}
 
 typedef bool (*dvmCreateInternalThreadFun)(pthread_t *, const char *, void *(*)(void *), void *);
 /*
@@ -173,6 +193,11 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
     
     char ijiamiLIb[255] = {0};
     sprintf(ijiamiLIb, "/data/data/%s/files/libexec.so", pkgName);
+    /*
+    if (strstr(dexName, "classes_8.dex") == 0)
+        return;
+    */
+    
     FILE *fijiami = fopen(ijiamiLIb, "r");
     if (fijiami) {
         __android_log_print(ANDROID_LOG_FATAL, TAG, "find ijiami libexec.so, use direct dump");
