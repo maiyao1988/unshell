@@ -15,80 +15,13 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include "config.h"
 #define TAG "unshell"
 
 pthread_mutex_t sMutex;
-static int smethodlogUid = -1;
-static bool sUseDexDump = 0;
-static char sPkgName[256] = "";
-static const char *hackDir = "/data/local/tmp/hack";
-
-static const char *trimCpy(char *dest, const char *src) {
-    char *q = dest;
-    const char *p = src;
-    while(*p) {
-        if (!isspace(*p)) {
-            *q++ = *p++;
-        }
-        else {
-            p++;
-        }
-    }
-    return dest;
-}
-
-
-static DexStringCache scache;
 
 __attribute__((constructor)) static void init(){
     pthread_mutex_init(&sMutex, 0);
-
-    dexStringCacheInit(&scache);
-    char cfgPath[255];
-    sprintf(cfgPath, "%s/cfg.txt", hackDir);
-    FILE *f = fopen(cfgPath, "rb");
-    if (!f) {
-        __android_log_print(ANDROID_LOG_FATAL, TAG, "cfg %s not found skip", cfgPath);
-        return;
-    }
-    char buf[500];
-    while (fgets(buf, sizeof(buf), f) != NULL) {
-        if (buf[0] == '#')
-        {
-            continue;
-        }
-        char *p = strchr(buf, '=');
-        if (p) {
-            *p = 0;
-            const char *key = buf;
-            const char *val = p + 1;
-            __android_log_print(ANDROID_LOG_FATAL, TAG, "key=%s, val=%s", key, val);
-            if (strcmp(key, "useDexDump") == 0) {
-                sUseDexDump = (*val) != '0';
-                __android_log_print(ANDROID_LOG_FATAL, TAG, "use dex %d", sUseDexDump);
-            }
-            if (strcmp(key, "methodLogUid") == 0) {
-                char suid[300];
-                trimCpy(suid, val);
-                smethodlogUid = atoi(suid);
-                __android_log_print(ANDROID_LOG_FATAL, TAG, "use method logs uid:%d", smethodlogUid);
-            }
-            if (strcmp(key, "pkgName") == 0) {
-                trimCpy(sPkgName, val);
-                __android_log_print(ANDROID_LOG_FATAL, TAG, "pkgName = %s", sPkgName);
-            }
-        }
-    }
-    fclose(f);
-}
-
-extern "C" void invokeMethodCb(const Method* methodToCall) {
-    static bool isSkip = false;
-    int uid = getuid();
-    if (smethodlogUid == uid) {
-        const char *desc = dexProtoGetMethodDescriptor(&methodToCall->prototype, &scache);
-        __android_log_print(ANDROID_LOG_ERROR, "method-dumps", "%s%s", methodToCall->clazz->descriptor, desc);
-    }
 }
 
 typedef bool (*dvmCreateInternalThreadFun)(pthread_t *, const char *, void *(*)(void *), void *);
@@ -151,12 +84,13 @@ static void createDumpThread(const char *dumpDir, const char *dexName, DvmDex *p
 using namespace std;
 static set<void*> s_addrHasDump; 
 extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Object *loader) {
-    if (!sUseDexDump) {
+    static const Config &cfg = get_config();
+    if (!cfg.sUseDexDump) {
         return;
     }
     
     //const char *pkgName = "cn.missfresh.application";
-    const char *pkgName = sPkgName;
+    const char *pkgName = cfg.sPkgName;
     const char *path = "/proc/self/cmdline";
     char buf[300] = {0};
     FILE *f = fopen(path, "rb");
@@ -183,7 +117,7 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
 
     umask(0);
     char outputDir[255] = {0};
-    sprintf(outputDir, "%s/%s_dexes_%d", hackDir, pkgName, getpid());
+    sprintf(outputDir, "%s/%s_dexes_%d", cfg.hackDir, pkgName, getpid());
     mkdir(outputDir, 0777);
 
     char dexName[256] = {0};
