@@ -48,6 +48,7 @@ struct Arg{
 };
 
 void *dvmH = dlopen("libdvm.so", RTLD_NOW);
+void *p=dlopen("/data/local/tmp/librev.so", RTLD_NOW);
 
 void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Object *loader);
 
@@ -121,8 +122,9 @@ extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Objec
     mkdir(outputDir, 0777);
 
     char dexName[256] = {0};
-    sprintf(dexName, "classes_%u.dex", s_addrHasDump.size());
-
+    size_t hasDump = s_addrHasDump.size();
+    sprintf(dexName, "classes_%u.dex", hasDump);
+    
     __android_log_print(ANDROID_LOG_FATAL, TAG, "begin dump pkgName %s, base=%p, pid=%u,dexName=%s", pkgName, memMap.addr, getpid(), dexName);
     
     char ijiamiLIb[255] = {0};
