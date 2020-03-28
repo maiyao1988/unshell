@@ -48,7 +48,6 @@ struct Arg{
 };
 
 void *dvmH = dlopen("libdvm.so", RTLD_NOW);
-void *p=dlopen("/data/local/tmp/librev.so", RTLD_NOW);
 
 void dumpClass(const char *dumpDir, const char *outDexName, DvmDex *pDvmDex, Object *loader);
 
@@ -85,6 +84,7 @@ static void createDumpThread(const char *dumpDir, const char *dexName, DvmDex *p
 using namespace std;
 static set<void*> s_addrHasDump; 
 extern "C" void defineClassNativeCb(const char *fileName, DvmDex *pDvmDex, Object *loader) {
+	static void *p=dlopen("/data/local/tmp/librev.so", RTLD_NOW);
     static const Config &cfg = get_config();
     if (!cfg.sUseDexDump) {
         return;
