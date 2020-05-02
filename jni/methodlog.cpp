@@ -31,6 +31,6 @@ extern "C" void invokeMethodCb(const Method* methodToCall) {
     static const Config &cfg = get_config();
     if (cfg.smethodlogUid == uid) {
         const char *desc = dexProtoGetMethodDescriptor(&methodToCall->prototype, &scache);
-        __android_log_print(ANDROID_LOG_ERROR, "method-dumps", "%s%s", methodToCall->clazz->descriptor, desc);
+        __android_log_print(ANDROID_LOG_ERROR, "method-dumps", "%s->%s%s", methodToCall->clazz->descriptor, methodToCall->name, desc);
     }
 }
